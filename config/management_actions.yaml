@@ -1,0 +1,139 @@
+# Management action catalog — the authored "claim sheets" behind every
+# recommendation. Analysts own these numbers; the simulation computes the
+# consequences. Edit here (no code changes needed); the app validates on load.
+#
+# Fields per action:
+#   name            display name (must stay stable — recommendations key on it)
+#   description     one-sentence executive description
+#   horizon         Execution (0-3 mo) | Tactical (1-3 qtrs) | Long-lead (6-18 mo)
+#   action_cost_usd direct decision cost (fees, program cost), hits opex in Q1
+#   overrides       simulation parameter changes (the capability being claimed).
+#                   Months are 0-based (0 = first planning month). Ramp values
+#                   are [start_month, value].
+#
+# Note: the overtime conversion premium is NOT set here — it comes from
+# overtime_premium_pct in the EMS site table (data/generated/ems_sites.csv).
+
+actions:
+  # ---- Execution horizon (0-3 months; SIOP sets the envelope) ----
+  - name: Expedite critical component receipts
+    description: Raise expedite recovery of delayed receipts from 50% to 85%;
+      freight and broker premiums apply through COGS. Effective immediately.
+    horizon: Execution
+    action_cost_usd: 0.0
+    overrides:
+      expedite_recovery: 0.85
+      expedite_premium_mult: 1.1
+
+  - name: Authorize overtime at EMS sites
+    description: Run up to 80% of maximum overtime at all EMS partners,
+      effective month 2 (crew scheduling latency).
+    horizon: Execution
+    action_cost_usd: 5.0e6
+    overrides:
+      overtime_fraction: 0.8
+      overtime_start_month: 1
+
+  - name: Expedite high-end FPGA receipts only
+    description: Targeted expediting - raise recovery of delayed high-end FPGA
+      receipts to 90% while all other components stay at normal 50% recovery.
+      Premiums apply only to expedited FPGA volume.
+    horizon: Execution
+    action_cost_usd: 0.2e6
+    overrides:
+      expedite_recovery_by_comp:
+        High-End FPGA: 0.90
+
+  - name: Accept shipment risk (no extraordinary cost)
+    description: Cut expediting back to 30% recovery and accept later shipments
+      rather than incur premium cost.
+    horizon: Execution
+    action_cost_usd: 0.0
+    overrides:
+      expedite_recovery: 0.30
+
+  # ---- Tactical horizon (one to three quarters) ----
+  - name: Reserve additional EMS capacity
+    description: Reserve 7 std-equivalent units/month at EMS Taiwan and EMS
+      Americas (take-or-pay fees); contracted capacity comes online in month 3.
+    horizon: Tactical
+    action_cost_usd: 4.5e6
+    overrides:
+      ems_capacity_add_ramp:
+        EMS Taiwan: [2, 4.0]
+        EMS Americas: [2, 3.0]
+
+  - name: Increase FPGA safety stock
+    description: Buy ahead - +15% high-end FPGA receipts (arriving from month 3
+      given supplier response time) and +20% safety-stock policy.
+    horizon: Tactical
+    action_cost_usd: 1.0e6
+    overrides:
+      comp_supply_ramp:
+        High-End FPGA: [2, 1.15]
+      safety_stock_mult: 1.2
+
+  - name: Shift eligible builds to EMS Taiwan
+    description: Move flexible volume toward EMS Taiwan from month 3; +3
+      std-units/month there, -2 at EMS Malaysia (transition friction).
+    horizon: Tactical
+    action_cost_usd: 1.5e6
+    overrides:
+      ems_capacity_add_ramp:
+        EMS Taiwan: [2, 3.0]
+        EMS Malaysia: [2, -2.0]
+
+  - name: Add temporary integration capacity
+    description: Contract labor and a second shift add 8% final-integration
+      capacity from month 2 (hiring and training latency).
+    horizon: Tactical
+    action_cost_usd: 3.5e6
+    overrides:
+      integration_capacity_ramp: [1, 1.08]
+
+  - name: Pre-build standard subassemblies
+    description: Advance-buy 5% of component receipts from month 2 to de-risk
+      assembly starts.
+    horizon: Tactical
+    action_cost_usd: 2.0e6
+    overrides:
+      comp_supply_ramp:
+        "__all__": [1, 1.05]
+
+  # ---- Long-lead horizon (6-18 months; decisions only SIOP can make) ----
+  - name: Dual-source the high-end FPGA
+    description: Qualify an alternate FPGA source; +30% receipts after a
+      six-month qualification window.
+    horizon: Long-lead
+    action_cost_usd: 2.5e6
+    overrides:
+      comp_supply_ramp:
+        High-End FPGA: [6, 1.3]
+
+  - name: Commit long-lead component orders
+    description: Place non-cancellable orders now for constrained long-lead
+      items; receipts arrive months 7+ given 24-30 week lead times.
+    horizon: Long-lead
+    action_cost_usd: 0.8e6
+    overrides:
+      comp_supply_ramp:
+        High-End FPGA: [7, 1.20]
+        High-Bandwidth ADC Module: [6, 1.15]
+        Precision Analog Instrument Module: [6, 1.15]
+
+  - name: Qualify EMS Eastern Europe for Zenith Compute
+    description: Qualify a third site for the Zenith family; qualified capacity
+      becomes usable from month 10 after audits and pilot builds.
+    horizon: Long-lead
+    action_cost_usd: 3.0e6
+    overrides:
+      add_qualification:
+        - [EMS Eastern Europe, Zenith Compute Test, 9]
+
+  - name: Expand final-integration headcount
+    description: Permanent staffing adds 12% integration capacity from month 7
+      (requisition, hiring and certification ramp).
+    horizon: Long-lead
+    action_cost_usd: 6.0e6
+    overrides:
+      integration_capacity_ramp: [6, 1.12]

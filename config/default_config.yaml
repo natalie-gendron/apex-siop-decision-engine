@@ -1,0 +1,67 @@
+# Apex Test Systems — SIOP Risk & Scenario Engine
+# All values are synthetic planning assumptions for a fictional company.
+
+random_seed: 42
+n_months: 18
+
+simulation:
+  quick_sims: 1000
+  standard_sims: 5000
+  detailed_sims: 10000
+  default_mode: standard
+
+financial:
+  gross_margin_target: 0.57         # company GM target
+  inventory_target_usd: 600.0e6     # ending-inventory target
+  inventory_turns_target: 2.2
+  opex_monthly_usd: 68.0e6          # operating expense per month (R&D + SG&A)
+  depreciation_monthly_usd: 7.5e6
+  capex_monthly_usd: 6.0e6
+  tax_rate: 0.16
+  dso_days: 78                      # days sales outstanding (receivables proxy)
+  dpo_days: 52                      # days payables outstanding
+  eo_reserve_rate: 0.25             # reserve rate applied to modeled excess exposure
+  revenue_plan_buffer: 0.92         # plan set below unconstrained demand revenue
+
+# Volatility assumptions (annualized cycle amplitude expressed as monthly multipliers)
+uncertainty:
+  market_demand_sigma:              # lognormal sigma of market-level demand multiplier
+    "AI / HPC": 0.16
+    "Memory": 0.20
+    "Mobile / Consumer": 0.12
+    "Automotive": 0.10
+    "Industrial / Mixed-Signal": 0.09
+  customer_idiosyncratic_sigma: 0.10
+  asp_sigma: 0.025                  # realized ASP variability
+  material_cost_sigma: 0.02         # PPV variability
+  fx_cost_sigma: 0.012              # FX-driven cost variability
+  conversion_cost_sigma: 0.03
+  freight_sigma: 0.10
+  ems_labor_sigma: 0.05
+  utilization_adherence_penalty: 0.12   # adherence loss at 100% utilization
+  site_disruption_impact: 0.35          # capacity lost in a disrupted site-month
+
+# Common-factor model. Factors are independent standard normals; every stochastic
+# variable loads on one or more factors. Loadings are correlations (bounded [-1, 1]);
+# the implied covariance is positive semidefinite by construction.
+factors:
+  names:
+    - Global semicap spending
+    - AI / HPC demand
+    - Memory cycle
+    - Mobile cycle
+    - Auto & industrial cycle
+    - Component supply tightness
+    - Regional logistics disruption
+    - EMS labor & execution
+  persistence: 0.85                 # month-over-month AR(1) persistence of factor paths
+  loadings:
+    # variable: {factor name: loading}
+    "AI / HPC":                {"Global semicap spending": 0.45, "AI / HPC demand": 0.75}
+    "Memory":                  {"Global semicap spending": 0.45, "Memory cycle": 0.80}
+    "Mobile / Consumer":       {"Global semicap spending": 0.40, "Mobile cycle": 0.75}
+    "Automotive":              {"Global semicap spending": 0.35, "Auto & industrial cycle": 0.75}
+    "Industrial / Mixed-Signal": {"Global semicap spending": 0.35, "Auto & industrial cycle": 0.65}
+    "Component tightness":     {"Global semicap spending": 0.40, "Component supply tightness": 0.80}
+    "Logistics disruption":    {"Regional logistics disruption": 0.90}
+    "EMS execution":           {"EMS labor & execution": 0.85, "Regional logistics disruption": 0.20}

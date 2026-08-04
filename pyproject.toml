@@ -1,0 +1,26 @@
+[project]
+name = "ate-siop-engine"
+version = "1.0.0"
+description = "Apex Test Systems — AI-enabled SIOP Risk & Scenario Engine (synthetic executive prototype)"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "streamlit>=1.38",
+    "pandas>=2.1",
+    "numpy>=1.26",
+    "scipy>=1.11",
+    "plotly>=5.18",
+    "openpyxl>=3.1",
+    "pydantic>=2.5",
+    "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.setuptools]
+packages = ["src"]
