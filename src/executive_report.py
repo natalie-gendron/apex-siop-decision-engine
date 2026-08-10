@@ -27,9 +27,14 @@ MATERIAL_PROB_PTS = 0.02
 
 @dataclass
 class ReportContext:
-    """Everything a narrative provider may draw on."""
+    """Everything a narrative provider may draw on.
 
-    base_kpi: dict[str, Any]
+    `kpi` (and the binding/risk frames) describe the world being narrated:
+    the base case normally, or the selected scenario when `conditioned_on`
+    carries its name. `scenario_compare` supplies the deltas back to base.
+    """
+
+    kpi: dict[str, Any]
     risks: list[dict[str, str]]
     binding: pd.DataFrame
     family_risk: pd.DataFrame
@@ -39,6 +44,7 @@ class ReportContext:
     scenario_compare: dict[str, Any] | None = None
     driver_ranking: pd.DataFrame | None = None
     demand_confidence: Any | None = None     # market_intelligence.DemandConfidence
+    conditioned_on: str | None = None        # scenario name when not the base case
 
 
 class NarrativeProvider(ABC):
@@ -69,7 +75,7 @@ class RulesBasedNarrative(NarrativeProvider):
 
     # ------------------------------------------------------------------
     def _outlook(self, ctx: ReportContext) -> str:
-        k = ctx.base_kpi
+        k = ctx.kpi
         p_q1, p_fy, p_gm = k["p_q1_plan"], k["p_fy_plan"], k["p_gm_target"]
         gap_q1 = k["q1_revenue"]["median"] - k["q1_plan"]
         tone = ("broadly on track" if p_q1 >= 0.7 and p_gm >= 0.55
@@ -77,8 +83,12 @@ class RulesBasedNarrative(NarrativeProvider):
                 else "unlikely to be achieved without intervention")
         gap_txt = (f"{fmt_money(abs(gap_q1))} {'above' if gap_q1 >= 0 else 'below'} plan "
                    f"at the median")
+        opening = (f"**Overall outlook — conditioned on {ctx.conditioned_on}.** "
+                   f"If this scenario occurs, the plan is {tone}."
+                   if ctx.conditioned_on else
+                   f"**Overall outlook.** The current plan is {tone}.")
         text = (
-            f"**Overall outlook.** The current plan is {tone}. Simulation places the "
+            f"{opening} Simulation places the "
             f"probability of achieving the quarterly revenue plan at {p_q1:.0%}, the "
             f"full-year plan at {p_fy:.0%}, and the {k['gm_target']:.1%} gross-margin "
             f"target at {p_gm:.0%}. Expected Q1 revenue of "
@@ -96,7 +106,7 @@ class RulesBasedNarrative(NarrativeProvider):
 
     # ------------------------------------------------------------------
     def _revenue_margin_risk(self, ctx: ReportContext) -> str:
-        k = ctx.base_kpi
+        k = ctx.kpi
         fam = ctx.family_risk
         top_two = fam.head(2)
         fam_txt = " and ".join(top_two["product_family"].tolist())
@@ -124,7 +134,7 @@ class RulesBasedNarrative(NarrativeProvider):
 
     # ------------------------------------------------------------------
     def _operational_constraints(self, ctx: ReportContext) -> str:
-        k = ctx.base_kpi
+        k = ctx.kpi
         parts = ["**Operational constraints.**"]
         if len(ctx.binding) and ctx.binding.iloc[0]["binding_frequency"] >= 0.05:
             top = ctx.binding.iloc[0]
@@ -147,7 +157,7 @@ class RulesBasedNarrative(NarrativeProvider):
 
     # ------------------------------------------------------------------
     def _inventory_cash(self, ctx: ReportContext) -> str:
-        k = ctx.base_kpi
+        k = ctx.kpi
         inv = k["ending_inventory"]
         direction = "above" if inv["mean"] > k["inventory_target"] else "below"
         return (
@@ -165,11 +175,15 @@ class RulesBasedNarrative(NarrativeProvider):
     # ------------------------------------------------------------------
     def _decisions(self, ctx: ReportContext) -> str:
         recs = ctx.recommendations
+        cond_note = (" (Actions are valued against the standing base-case "
+                     "outlook; the Management Recommendations page prices them "
+                     "under the selected scenario.)" if ctx.conditioned_on else "")
         positive = [r for r in recs if r.expected_value_usd > 0]
         if not positive:
             return ("**Recommended decisions.** No modeled management action clears "
                     "the expected-value bar this cycle; the recommendation is to "
-                    "hold current commitments and revisit at the next SIOP meeting.")
+                    "hold current commitments and revisit at the next SIOP meeting."
+                    + cond_note)
         lines = ["**Recommended decisions.**"]
         for i, r in enumerate(positive[:3], 1):
             lines.append(
@@ -182,7 +196,7 @@ class RulesBasedNarrative(NarrativeProvider):
                 "Benefits of these actions overlap where they relieve the same "
                 "constraint; sequencing matters more than adopting all of them at "
                 "once.")
-        return " ".join(lines)
+        return " ".join(lines) + cond_note
 
     # ------------------------------------------------------------------
     def _scenario_delta(self, ctx: ReportContext) -> str:
@@ -212,7 +226,7 @@ class RulesBasedNarrative(NarrativeProvider):
 
     # ------------------------------------------------------------------
     def appendix(self, ctx: ReportContext) -> str:
-        k = ctx.base_kpi
+        k = ctx.kpi
         lines = [
             "### Appendix — detailed readout",
             "",

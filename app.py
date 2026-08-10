@@ -293,14 +293,27 @@ risks = detect_risks(base_kpi, binding, dc)
 recs = build_recommendations(base_kpi, action_results, binding,
                              demand_confidence=dc)
 
+# plan-of-record narrative — anchors the Excel export regardless of scenario
 provider = get_provider("rules")
-ctx = ReportContext(base_kpi=base_kpi, risks=risks, binding=binding,
+ctx = ReportContext(kpi=base_kpi, risks=risks, binding=binding,
                     family_risk=fam_risk, capacity_risk=cap_risk,
                     recommendations=recs, scenario_kpi=scen_kpi if scen_cmp else None,
                     scenario_compare=scen_cmp,
                     driver_ranking=rankings["FY revenue"],
                     demand_confidence=dc)
 summary_text = provider.executive_summary(ctx)
+
+# scenario-conditioned counterparts for the Executive Overview (outcome page)
+if scen_result is base_result:
+    scen_risks, overview_summary = risks, summary_text
+else:
+    scen_risks = detect_risks(scen_kpi, scen_binding, dc)
+    overview_summary = provider.executive_summary(ReportContext(
+        kpi=scen_kpi, risks=scen_risks, binding=scen_binding,
+        family_risk=scen_fam_risk, capacity_risk=scen_cap_risk,
+        recommendations=recs, scenario_kpi=scen_kpi, scenario_compare=scen_cmp,
+        driver_ranking=scen_rankings["FY revenue"], demand_confidence=dc,
+        conditioned_on=spec.name))
 
 # ---------------------------------------------------------------------------
 # Header + tabs
@@ -325,8 +338,18 @@ tabs = st.tabs([
 ])
 
 # ---------------------------- 1. Executive Overview ------------------------
+# Outcome page: everything follows the selected scenario (design rule — a view
+# is either plan-of-record or outcome). Plan/targets stay the frozen anchors
+# in the tile deltas; the strip below the tiles prices the scenario vs base.
 with tabs[0]:
-    k = base_kpi
+    k = scen_kpi
+    if scen_result is not base_result:
+        st.info(f"Conditioned on the **{spec.name}** scenario — every figure on "
+                f"this page answers *\"if this happens, where do we land?\"* "
+                f"Tiles compare against the frozen plan of record; the strip "
+                f"below them prices the scenario against the standing base-case "
+                f"outlook. Select Base Case in the sidebar for the "
+                f"plan-of-record view.")
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Expected Q1 revenue", fmt_money(k["q1_revenue"]["mean"]),
               f"{fmt_money(k['q1_revenue']['mean'] - k['q1_plan'])} vs plan")
@@ -342,16 +365,29 @@ with tabs[0]:
     c7.metric("Service level (fill rate)", fmt_pct(k["service_level"]["mean"]))
     c8.metric("FY revenue at risk (P5)", fmt_money(k["fy_revenue_at_risk"]))
 
+    if scen_cmp:
+        st.markdown(f"#### What {spec.name} changes vs the base outlook")
+        cc = st.columns(4)
+        cc[0].metric("Δ expected FY revenue", fmt_money(scen_cmp["d_fy_revenue"]))
+        cc[1].metric("Δ P(FY plan)", fmt_pts(scen_cmp["d_p_fy_plan"]))
+        cc[2].metric("Δ FY gross margin", fmt_pts(scen_cmp["d_fy_gm"]))
+        cc[3].metric("Δ ending inventory", fmt_money(scen_cmp["d_inventory"]),
+                     delta_color="off")
+
     st.markdown("### Executive summary")
-    st.markdown(md(summary_text))
+    st.markdown(md(overview_summary))
 
     col_l, col_r = st.columns(2)
     with col_l:
-        st.markdown("#### Top risks")
-        for r in risks[:3]:
+        st.markdown(f"#### Top risks{scen_suffix}")
+        for r in scen_risks[:3]:
             st.warning(md(f"{r['risk']}  \n*Trigger: {r['threshold']}*"))
     with col_r:
         st.markdown("#### Top recommended actions")
+        if scen_result is not base_result:
+            st.caption("Valued against the standing base-case outlook — open "
+                       "Management Recommendations to price these under the "
+                       "selected scenario.")
         if recs:
             for r in recs[:3]:
                 st.info(md(
@@ -360,15 +396,6 @@ with tabs[0]:
                     f"{fmt_money(r.incremental_cost_usd)} ({r.confidence} confidence)"))
         else:
             st.info("No modeled action clears the expected-value bar this cycle.")
-
-    if scen_cmp:
-        st.markdown(f"#### Base vs {spec.name}")
-        cc = st.columns(4)
-        cc[0].metric("Δ expected FY revenue", fmt_money(scen_cmp["d_fy_revenue"]))
-        cc[1].metric("Δ P(FY plan)", fmt_pts(scen_cmp["d_p_fy_plan"]))
-        cc[2].metric("Δ FY gross margin", fmt_pts(scen_cmp["d_fy_gm"]))
-        cc[3].metric("Δ ending inventory", fmt_money(scen_cmp["d_inventory"]),
-                     delta_color="off")
 
     from src.simulation import quarterly
     g1, g2 = st.columns(2)

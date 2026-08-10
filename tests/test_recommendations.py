@@ -68,7 +68,7 @@ def test_executive_summary_is_dynamic(data, config, baseline, base_result, pipel
 
     def make_summary(kpi, result):
         ctx = ReportContext(
-            base_kpi=kpi, risks=detect_risks(kpi, binding), binding=binding,
+            kpi=kpi, risks=detect_risks(kpi, binding), binding=binding,
             family_risk=family_revenue_at_risk(result, baseline),
             capacity_risk=monthly_capacity_risk(result), recommendations=recs)
         return provider.executive_summary(ctx)
@@ -79,6 +79,28 @@ def test_executive_summary_is_dynamic(data, config, baseline, base_result, pipel
     assert s1 != s2
     word_count = len(s1.split())
     assert 200 <= word_count <= 550
+
+
+def test_executive_summary_conditioned_on_scenario(baseline, base_result, pipeline):
+    """A conditioned summary must name the scenario and flag base-anchored
+    decisions; the unconditioned summary must do neither."""
+    base_kpi, binding, _, recs = pipeline
+    provider = get_provider("rules")
+
+    def make_summary(conditioned_on):
+        ctx = ReportContext(
+            kpi=base_kpi, risks=detect_risks(base_kpi, binding), binding=binding,
+            family_risk=family_revenue_at_risk(base_result, baseline),
+            capacity_risk=monthly_capacity_risk(base_result),
+            recommendations=recs, conditioned_on=conditioned_on)
+        return provider.executive_summary(ctx)
+
+    plain = make_summary(None)
+    conditioned = make_summary("Critical FPGA Shortage")
+    assert "conditioned on Critical FPGA Shortage" in conditioned
+    assert "standing base-case outlook" in conditioned
+    assert "conditioned on" not in plain
+    assert "standing base-case outlook" not in plain
 
 
 def test_excel_export_builds(tmp_path, data, config, baseline, base_result, pipeline):
