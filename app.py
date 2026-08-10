@@ -940,7 +940,17 @@ with tabs[5]:
     st.caption("Below: the plan-of-record monthly baseline P&L — never moves "
                "with the sidebar.")
     st.markdown("#### Monthly baseline P&L")
-    st.dataframe(baseline.monthly.round(3), width='stretch', height=320)
+    monthly_fmt = {
+        **{c: lambda v: fmt_money(v) for c in baseline.monthly.columns
+           if c.endswith("_usd")},
+        **{c: "{:,.0f}" for c in baseline.monthly.columns
+           if c.startswith("units_")},
+        "gross_margin": "{:.1%}",
+        "ems_utilization": "{:.1%}",
+        "integration_utilization": "{:.1%}",
+    }
+    st.dataframe(baseline.monthly.style.format(monthly_fmt),
+                 width='stretch', height=320)
 
 # ---------------------------- 6. Risk Drivers ------------------------------
 with tabs[6]:
