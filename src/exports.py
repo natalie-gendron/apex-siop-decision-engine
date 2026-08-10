@@ -178,9 +178,9 @@ def build_excel_export(
                   pct_cols=("Mean", "Median", "Std dev", "P5", "P25", "P75", "P95"))
         _write_df(writer, "Inventory & WC",
                   _stats_frame(base_kpi, [
-                      ("ending_inventory", "Ending inventory"),
-                      ("avg_inventory", "Average inventory"),
-                      ("working_capital", "Working capital"),
+                      ("ending_inventory", "Ending inventory (fiscal year-end)"),
+                      ("avg_inventory", "Average inventory (FY)"),
+                      ("working_capital", "Working capital (fiscal year-end)"),
                       ("eo_reserve", "E&O reserve"),
                       ("expedite_cost", "Expedite cost (FY)"),
                       ("rework_cost", "Rework cost (FY)")]),

@@ -126,7 +126,7 @@ def inventory_trajectory(result: SimulationResult, target: float) -> go.Figure:
     fig.add_hline(y=target / 1e6, line=dict(color=INK, width=2, dash="dash"),
                   annotation_text=f"Target {fmt_money(target)}",
                   annotation_font=dict(size=11, color=INK))
-    return _layout(fig, "Ending-inventory trajectory with uncertainty band",
+    return _layout(fig, "Month-end inventory trajectory vs target (18-month horizon)",
                    "", "Inventory ($M)")
 
 
@@ -206,7 +206,8 @@ def scenario_comparison_chart(rows: list[dict]) -> go.Figure:
         name="Δ ending inventory ($M)", marker_color=SERIES[1],
         hovertemplate="%{x}: %{y:+.1f}M<extra>Δ inventory</extra>"))
     fig.update_layout(barmode="group", bargap=0.25, bargroupgap=0.08)
-    return _layout(fig, "Scenario deltas versus base case", "", "$M", height=420)
+    return _layout(fig, "Full-year scenario deltas versus base case", "", "$M",
+                   height=420)
 
 
 # ---------------------------------------------------------------------------
@@ -279,7 +280,7 @@ def risk_matrix(family_risk: pd.DataFrame, base_kpi: dict) -> go.Figure:
             textfont=dict(size=10, color=INK2), name=fam,
             hovertemplate=(f"{fam}<br>Expected shortfall vs baseline: "
                            f"%{{x:.0f}}%<br>Revenue at risk: $%{{y:.0f}}M<extra></extra>")))
-    return _layout(fig, "Risk matrix — expected shortfall vs downside revenue at risk",
+    return _layout(fig, "Risk matrix — expected FY shortfall vs FY revenue at risk",
                    "Expected shortfall vs baseline plan (%)",
                    "FY revenue at risk ($M)", height=420, legend=False)
 
@@ -387,8 +388,10 @@ def backlog_trajectory_chart(base_result: SimulationResult,
             x=m, y=base_b.mean(axis=0), mode="lines",
             line=dict(color=INK, width=2, dash="dash"), name="Base case (expected)",
             hovertemplate="%{x}: %{y:.0f} systems<extra>Base case</extra>"))
-    return _layout(fig, "Expected past-due backlog — base vs scenario",
-                   "", "Systems past due", height=400)
+    title = ("Expected past-due backlog by month — base case"
+             if scen_result is base_result else
+             f"Expected past-due backlog by month — base vs {scenario_name}")
+    return _layout(fig, title, "", "Systems past due", height=400)
 
 
 def signal_history_chart(name: str, history: list[float], unit: str) -> go.Figure:

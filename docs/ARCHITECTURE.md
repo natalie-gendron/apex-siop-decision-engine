@@ -89,6 +89,26 @@ look sensible under the base case, not only under the posture that flatters
 it; and package EV ≠ sum of individual action EVs (actions relieving the
 same constraint overlap — the interaction gap is itself reported).
 
+### The two clocks (time windows)
+
+Every number carries one of three windows, and its label must say which:
+
+- **Q1** — months 1-3 of the horizon: the shipment commitment, execution's
+  question ("do we ship it?").
+- **Fiscal year** — months 1-12: plan attainment, margin and inventory
+  targets, and the window all action EVs are measured over (long-lead
+  actions' benefits partly fall beyond it by construction — present that,
+  don't "fix" it).
+- **Horizon** — all 18 monthly buckets: trajectory and capacity views.
+
+The Executive Overview groups its tiles by clock (quarter / full year /
+year-end position) rather than offering a quarter-vs-year toggle — the
+horizons aren't symmetric (year-end inventory, annual GM targets, and
+FY-window EV have no meaningful quarterly form), so a toggle would fabricate
+or suppress numbers. The clock is the third labeled dimension of every
+figure, handled like the other two: **context × reference frame × clock**,
+separated by element and named in the label, never toggled.
+
 ## Layer map
 
 | Layer | Contents | Code |

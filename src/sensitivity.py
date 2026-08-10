@@ -26,9 +26,9 @@ def outcome_arrays(result: SimulationResult) -> dict[str, np.ndarray]:
         "Q1 revenue": quarterly(result.revenue)[:, 0],
         "FY revenue": fy_rev,
         "FY gross margin": fy_gm,
-        "Ending inventory": result.inventory[:, 11],
-        "Working capital": result.working_capital[:, 11],
-        "Service level": service_level(result),
+        "Year-end inventory": result.inventory[:, 11],
+        "Year-end working capital": result.working_capital[:, 11],
+        "FY service level": service_level(result),
     }
 
 
