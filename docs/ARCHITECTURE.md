@@ -144,6 +144,20 @@ Executive answer first, then the meeting's supporting flow:
   decomposition is the bridge. Dual deltas per tile were considered and
   rejected as clutter; the three frames are separated by element, not
   toggled.
+- **Tile cards share one column grid; blanks are deliberate.** Columns are
+  concepts (level, probability, margin, margin probability, downside), and a
+  slot stays empty when the measure has no meaning on that clock — a blank
+  beats a manufactured number (e.g. there is no P(Q1 margin target): the
+  margin target is annual, and a quarterly probability against it would
+  invent a commitment nobody made). Revenue-at-risk lives on the plan cards
+  (quarter / full year), not the position card — it's a plan-attainment
+  measure.
+- **Working capital is a proxy, not a headline.** Its level is dominated by
+  fixed DSO/DPO assumptions layered on inventory (no receivables aging, no
+  payment terms, no balance-sheet FX), so it gets no overview tile; its
+  *deltas* are driven by modeled inventory and remain in the action and
+  scenario tables, and the narrative labels it a proxy. Revisit if real AR/AP
+  feeds arrive in V2.
 - **No plan-vs-base toggle.** Both frames are always visible; toggles create
   ambiguous screenshots.
 - **Recommendations price actions in a *world*, never in a context that
