@@ -481,9 +481,19 @@ with tabs[0]:
                              f"cost {fmt_money(package_cost)}",
                              delta_color="off")
             # r2[3] blank without a package; r2[4] always blank
-        st.plotly_chart(viz.context_bridge(
-            base_kpi, world_kpi, ctx_kpi, spec.name,
-            package_label if package_specs else None), width='stretch')
+        pkg_stage = package_label if package_specs else None
+        b1, b2 = st.columns(2)
+        b1.plotly_chart(viz.context_bridge(base_kpi, world_kpi, ctx_kpi,
+                                           spec.name, pkg_stage, "revenue"),
+                        width='stretch', key="bridge_revenue")
+        b2.plotly_chart(viz.context_bridge(base_kpi, world_kpi, ctx_kpi,
+                                           spec.name, pkg_stage, "margin"),
+                        width='stretch', key="bridge_margin")
+        if package_specs:
+            st.caption("Read the bridges together: a response can recover "
+                       "revenue while paying margin for it (expedite premiums "
+                       "land in COGS) — recovering both is a different "
+                       "decision than trading one for the other.")
         if len(package_specs) >= 2 and spec.name == "Base Case" \
                 and all(n in action_results for n in package_names):
             additive = sum(
@@ -869,11 +879,13 @@ with tabs[7]:
         default=["AI Demand Surge", "Critical FPGA Shortage",
                  "Major Customer Push-Out", "EMS Malaysia Disruption"])
     rows = []
+    scen_curves: dict = {}
     for name in chosen:
         s = scenarios[name]
         r = sim_with_confidence(n_sims, name, s.overrides)
         rows.append(compare_scenarios(base_kpi, kpi_summary(r, baseline, CONFIG),
                                       s.action_cost_usd))
+        scen_curves[name] = expected_past_due_curve(r)
     if rows:
         st.plotly_chart(viz.scenario_comparison_chart(rows), width='stretch')
         col_names = {
@@ -903,14 +915,16 @@ with tabs[7]:
     if world_result is not base_result:
         st.plotly_chart(viz.revenue_bridge(base_kpi, world_kpi),
                         width='stretch')
-    st.plotly_chart(viz.backlog_trajectory_chart(base_result, ctx_result,
-                                                 context_label),
-                    width='stretch', key="scen_cmp_trajectory")
-    st.caption("Past-due backlog = cumulative demand minus cumulative shipments "
-               "across simulated futures (expected value; band = conditioned "
-               "P25-P75). The plan-of-record backlog view on Demand & Backlog "
-               "deliberately does not change with the context — its "
-               "projected-delinquency section (same view as this) does.")
+    if scen_curves:
+        st.plotly_chart(viz.backlog_comparison_chart(pd_base_curve,
+                                                     scen_curves),
+                        width='stretch', key="scen_cmp_trajectory")
+        st.caption("Expected past-due backlog = cumulative demand minus "
+                   "cumulative shipments, floored at zero, averaged across "
+                   "simulated futures — one line per selected scenario, "
+                   "unmitigated (no response package). The conditioned view "
+                   "for your selected world + package lives on Demand & "
+                   "Backlog.")
 
 # ---------------------------- 8. Management Actions ------------------------
 with tabs[8]:

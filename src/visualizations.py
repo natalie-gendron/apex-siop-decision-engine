@@ -153,33 +153,62 @@ def revenue_bridge(base_kpi: dict, scen_kpi: dict) -> go.Figure:
 
 
 def context_bridge(base_kpi: dict, world_kpi: dict, final_kpi: dict,
-                   world_name: str, package_label: "str | None") -> go.Figure:
+                   world_name: str, package_label: "str | None",
+                   metric: str = "revenue") -> go.Figure:
     """Waterfall decomposing the evaluation context vs the base outlook:
     base → what the world (scenario) does → what the response package
-    recovers → conditioned outlook. Either middle stage may be absent."""
-    base_rev = base_kpi["fy_revenue"]["mean"]
+    does → conditioned outlook. Either middle stage may be absent.
+
+    metric="revenue" bridges expected FY revenue in $M; metric="margin"
+    bridges expected FY gross margin in percentage points (each step is
+    sequential conditioning, so the bars sum to the total exactly)."""
+    if metric == "revenue":
+        def val(k):
+            return k["fy_revenue"]["mean"] / 1e6
+
+        def fmt_abs(v):
+            return fmt_money(v * 1e6)
+
+        fmt_delta = fmt_abs
+        title = "Expected FY revenue — world vs response decomposition"
+        ytitle = "Revenue ($M)"
+    elif metric == "margin":
+        def val(k):
+            return k["fy_gm"]["mean"] * 100
+
+        def fmt_abs(v):
+            return f"{v:.1f}%"
+
+        def fmt_delta(v):
+            return f"{v:+.1f} pts"
+
+        title = "Expected FY gross margin — world vs response decomposition"
+        ytitle = "Gross margin (%)"
+    else:
+        raise ValueError(f"Unknown bridge metric '{metric}'")
+    base_v = val(base_kpi)
     x = ["Base outlook"]
     measure = ["absolute"]
-    y = [base_rev / 1e6]
-    text = [fmt_money(base_rev)]
-    prev = base_rev
+    y = [base_v]
+    text = [fmt_abs(base_v)]
+    prev = base_v
     if world_name != "Base Case":
-        d = world_kpi["fy_revenue"]["mean"] - prev
+        d = val(world_kpi) - prev
         x.append(world_name)
         measure.append("relative")
-        y.append(d / 1e6)
-        text.append(fmt_money(d))
+        y.append(d)
+        text.append(fmt_delta(d))
         prev += d
     if package_label:
-        d = final_kpi["fy_revenue"]["mean"] - prev
+        d = val(final_kpi) - prev
         x.append(package_label)
         measure.append("relative")
-        y.append(d / 1e6)
-        text.append(fmt_money(d))
+        y.append(d)
+        text.append(fmt_delta(d))
     x.append("Conditioned outlook")
     measure.append("total")
     y.append(None)
-    text.append(fmt_money(final_kpi["fy_revenue"]["mean"]))
+    text.append(fmt_abs(val(final_kpi)))
     fig = go.Figure(go.Waterfall(
         x=x, measure=measure, y=y, text=text, textposition="outside",
         connector=dict(line=dict(color=BASELINE_C)),
@@ -187,8 +216,7 @@ def context_bridge(base_kpi: dict, world_kpi: dict, final_kpi: dict,
         decreasing=dict(marker=dict(color=STATUS["critical"])),
         totals=dict(marker=dict(color=SERIES[0])),
     ))
-    return _layout(fig, "Expected FY revenue — world vs response decomposition",
-                   "", "Revenue ($M)", legend=False)
+    return _layout(fig, title, "", ytitle, legend=False)
 
 
 def scenario_comparison_chart(rows: list[dict]) -> go.Figure:
@@ -396,6 +424,27 @@ def backlog_trajectory_chart(base_result: SimulationResult,
              if scen_result is base_result else
              f"Expected past-due backlog by month — base vs {scenario_name}")
     return _layout(fig, title, "", "Systems past due", height=400)
+
+
+def backlog_comparison_chart(base_curve: np.ndarray,
+                             scen_curves: "dict[str, np.ndarray]") -> go.Figure:
+    """Expected past-due backlog by month — one line per selected scenario
+    (unmitigated) against the dashed base case."""
+    m = month_labels()
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=m, y=base_curve, mode="lines",
+        line=dict(color=INK, width=2, dash="dash"), name="Base case",
+        hovertemplate="%{x}: %{y:.0f} systems<extra>Base case</extra>"))
+    for i, (name, curve) in enumerate(scen_curves.items()):
+        fig.add_trace(go.Scatter(
+            x=m, y=curve, mode="lines+markers",
+            line=dict(color=SERIES[i % len(SERIES)], width=2),
+            marker=dict(size=5), name=name,
+            hovertemplate="%{x}: %{y:.0f} systems<extra>" + name + "</extra>"))
+    return _layout(fig,
+                   "Expected past-due backlog by month — scenarios vs base",
+                   "", "Systems past due", height=420)
 
 
 def signal_history_chart(name: str, history: list[float], unit: str) -> go.Figure:
