@@ -157,10 +157,13 @@ scenario_name = st.sidebar.selectbox(
          "business. Base Case = current SIOP assumptions.")
 
 ACTIONS_CATALOG = management_actions()
+st.session_state.setdefault("package_names", [])
 package_names = st.sidebar.multiselect(
     "Response package (what we will do)", list(ACTIONS_CATALOG),
+    key="package_names",
     help="Management actions evaluated together on top of the selected "
-         "scenario, with their combined cost. Empty = no action taken.")
+         "scenario, with their combined cost. Empty = no action taken. "
+         "Also editable via the checkboxes on Management Recommendations.")
 
 custom_params: dict = {}
 if scenario_name == "Custom Scenario":
@@ -818,8 +821,8 @@ with tabs[8]:
         st.caption("Actions are priced in the base world — the standing "
                    "outlook. Select a scenario in the sidebar to also price "
                    "them as contingent responses (\"what is this action worth "
-                   "if that world occurs?\"). Actions already in your response "
-                   "package are marked in the table.")
+                   "if that world occurs?\"). Use the checkboxes below to "
+                   "build the response package the rest of the app evaluates.")
 
     if conditioned:
         page_actions = cached_actions(data_seed, sim_seed, min(n_sims, 2000),
@@ -844,28 +847,54 @@ with tabs[8]:
     for name, (kpi, aspec) in page_actions.items():
         cmpv = compare_scenarios(ref_kpi, kpi, aspec.action_cost_usd)
         act_rows.append({
-            "Action": name, "Horizon": aspec.horizon,
-            "In package": "✓" if name in package_names else "",
-            "Δ FY revenue": cmpv["d_fy_revenue"],
-            "Δ gross profit": cmpv["d_gross_profit"],
-            "Δ P(Q1 plan)": cmpv["d_p_q1_plan"],
-            "Δ P(FY plan)": cmpv["d_p_fy_plan"],
-            "Δ FY GM": cmpv["d_fy_gm"],
-            "Δ inventory": cmpv["d_inventory"],
-            "Δ working capital": cmpv["d_working_capital"],
-            "Δ service": cmpv["d_service"], "Cost": aspec.action_cost_usd,
-            "Incremental EV": cmpv["incremental_ev"]})
-    adf = pd.DataFrame(act_rows).sort_values("Incremental EV", ascending=False)
-    st.dataframe(adf.set_index("Action").style.format({
-        "Δ FY revenue": lambda v: fmt_money(v),
-        "Δ gross profit": lambda v: fmt_money(v),
-        "Δ P(Q1 plan)": lambda v: fmt_pts(v),
-        "Δ P(FY plan)": lambda v: fmt_pts(v),
-        "Δ FY GM": lambda v: fmt_pts(v),
-        "Δ inventory": lambda v: fmt_money(v),
-        "Δ working capital": lambda v: fmt_money(v),
-        "Δ service": lambda v: fmt_pts(v), "Cost": lambda v: fmt_money(v),
-        "Incremental EV": lambda v: fmt_money(v)}), width='stretch')
+            "Action": name,
+            "In package": name in package_names,
+            "Horizon": aspec.horizon,
+            "Δ FY revenue ($M)": cmpv["d_fy_revenue"] / 1e6,
+            "Δ gross profit ($M)": cmpv["d_gross_profit"] / 1e6,
+            "Δ P(Q1 plan) (pts)": cmpv["d_p_q1_plan"] * 100,
+            "Δ P(FY plan) (pts)": cmpv["d_p_fy_plan"] * 100,
+            "Δ FY GM (pts)": cmpv["d_fy_gm"] * 100,
+            "Δ inventory ($M)": cmpv["d_inventory"] / 1e6,
+            "Δ working capital ($M)": cmpv["d_working_capital"] / 1e6,
+            "Δ service (pts)": cmpv["d_service"] * 100,
+            "Cost ($M)": aspec.action_cost_usd / 1e6,
+            "Incremental EV ($M)": cmpv["incremental_ev"] / 1e6})
+    adf = (pd.DataFrame(act_rows)
+           .sort_values("Incremental EV ($M)", ascending=False)
+           .set_index("Action"))
+
+    def _sync_package(editor_key: str) -> None:
+        """Apply checkbox edits to the shared package (runs before rerun,
+        so the sidebar multiselect picks the change up on the same pass)."""
+        edits = st.session_state[editor_key].get("edited_rows", {})
+        rows = st.session_state["package_editor_rows"]
+        chosen = set(st.session_state.get("package_names", []))
+        for pos, change in edits.items():
+            if "In package" in change:
+                name = rows[int(pos)]
+                (chosen.add if change["In package"] else chosen.discard)(name)
+        st.session_state["package_names"] = [n for n in ACTIONS_CATALOG
+                                             if n in chosen]
+
+    st.session_state["package_editor_rows"] = list(adf.index)
+    # a package-derived key gives the editor a clean slate whenever the
+    # package changes (from either the checkboxes or the sidebar), so its
+    # checkbox states always match the shared package exactly
+    editor_key = "package_editor|" + "|".join(sorted(package_names))
+    st.data_editor(
+        adf, key=editor_key, on_change=_sync_package, args=(editor_key,),
+        disabled=[c for c in adf.columns if c != "In package"],
+        column_config={
+            "In package": st.column_config.CheckboxColumn(
+                "In package",
+                help="Check to add this action to the response package "
+                     "(synced with the sidebar selector)."),
+            **{c: st.column_config.NumberColumn(format="%+.1f")
+               for c in adf.columns if "($M)" in c or "(pts)" in c},
+            "Cost ($M)": st.column_config.NumberColumn(format="%.1f"),
+        },
+        width='stretch')
     ref_label = f"the {spec.name} scenario" if conditioned else "the base case"
     st.caption(f"Every delta is action-versus-{ref_label} on identical simulated "
                "futures (common random numbers), so differences are the action's "
