@@ -770,12 +770,24 @@ with tabs[3]:
         st.dataframe(site_disruption_frequency(ctx_result)
                      .style.format({"disruption_frequency": "{:.1%}"}),
                      width='stretch')
+    st.divider()
+    st.caption("Below: input reference — the component master never moves "
+               "with the sidebar.")
     st.markdown("#### Component master")
     st.dataframe(data.components, width='stretch', height=380)
 
 # ---------------------------- 4. EMS & Integration -------------------------
 with tabs[4]:
-    st.plotly_chart(viz.utilization_heatmap(ctx_result), width='stretch')
+    if ctx_result is not base_result:
+        st.caption(f"Showing capacity utilization under **{context_label}**. "
+                   "Select Base Case (and clear the package) for the standing "
+                   "picture.")
+    st.plotly_chart(viz.utilization_heatmap(ctx_result, ctx_suffix),
+                    width='stretch')
+    st.divider()
+    st.caption("Everything below is the plan-of-record baseline — "
+               "deterministic site loading and capacity vs demand; it never "
+               "moves with the sidebar.")
     st.plotly_chart(viz.site_utilization_heatmap(baseline), width='stretch')
     st.plotly_chart(viz.ems_capacity_vs_demand(baseline), width='stretch')
     st.markdown("#### Baseline constraint log")
@@ -784,6 +796,10 @@ with tabs[4]:
 # ---------------------------- 5. Financial Outcomes ------------------------
 with tabs[5]:
     from src.simulation import fiscal_year
+    if ctx_result is not base_result:
+        st.caption(f"Showing financial outcomes under **{context_label}**. "
+                   "Select Base Case (and clear the package) for the standing "
+                   "picture.")
     fy_map = {
         "FY revenue": ctx_result.revenue[:, :12].sum(axis=1),
         "FY gross profit": ctx_result.gross_profit[:, :12].sum(axis=1),
@@ -795,11 +811,11 @@ with tabs[5]:
     ref = baseline.revenue_plan_q[:4].sum() if pick == "FY revenue" else \
         float(np.median(fy_map[pick]))
     st.plotly_chart(viz.distribution_with_target(
-        fy_map[pick], ref, f"{pick} distribution", f"{pick} ($)",
+        fy_map[pick], ref, f"{pick} distribution{ctx_suffix}", f"{pick} ($)",
         target_label="Plan" if pick == "FY revenue" else "Median"),
         width='stretch')
     st.plotly_chart(viz.inventory_trajectory(
-        ctx_result, CONFIG.financial.inventory_target_usd),
+        ctx_result, CONFIG.financial.inventory_target_usd, ctx_suffix),
         width='stretch')
     st.markdown(f"#### FY distribution statistics{ctx_suffix}")
     stats_rows = []
@@ -809,6 +825,9 @@ with tabs[5]:
             "P5": np.percentile(arr, 5), "P95": np.percentile(arr, 95)})
     st.dataframe(pd.DataFrame(stats_rows).set_index("Metric")
                  .style.format(lambda v: fmt_money(v)), width='stretch')
+    st.divider()
+    st.caption("Below: the plan-of-record monthly baseline P&L — never moves "
+               "with the sidebar.")
     st.markdown("#### Monthly baseline P&L")
     st.dataframe(baseline.monthly.round(3), width='stretch', height=320)
 
@@ -896,44 +915,39 @@ with tabs[7]:
 # ---------------------------- 8. Management Actions ------------------------
 with tabs[8]:
     st.markdown("#### Modeled management actions")
-    if spec.name != "Base Case":
-        eval_choice = st.radio(
-            "Evaluation world (which world each action is priced in):",
-            [f"Base Case — the standing outlook",
-             f"{spec.name} — value if this world occurs"],
-            horizontal=True)
-        conditioned = eval_choice.startswith(spec.name)
-    else:
-        conditioned = False
-        st.caption("Actions are priced in the base world — the standing "
-                   "outlook. Select a scenario in the sidebar to also price "
-                   "them as contingent responses (\"what is this action worth "
-                   "if that world occurs?\"). Use the checkboxes below to "
-                   "build the response package the rest of the app evaluates.")
-
+    # Actions are priced in the WORLD of the sidebar context, automatically —
+    # no page-local world selector (that would be a second source of truth).
+    # Under a scenario, the base-world EV stays visible as a comparison
+    # column: both frames at once, never toggled.
+    conditioned = spec.name != "Base Case"
     if conditioned:
-        page_actions = cached_actions(data_seed, sim_seed, min(n_sims, 2000),
-                                      dc.level, _params_key(spec.overrides),
-                                      data, baseline, spec.overrides)
+        with st.spinner(f"Pricing every action in the {spec.name} world..."):
+            page_actions = cached_actions(data_seed, sim_seed, min(n_sims, 2000),
+                                          dc.level, _params_key(spec.overrides),
+                                          data, baseline, spec.overrides)
         ref_kpi = world_kpi
-        st.info(f"**Conditioned view:** every number below answers "
-                f"*\"if {spec.name} occurs, what does this action buy us?\"* "
-                f"Each action is simulated on top of the scenario and compared "
-                f"against the scenario without it, using the same futures. "
-                f"Action values can shift sharply versus the base-case view — "
-                f"in both directions. An action only pays under stress if it "
-                f"relieves the constraint the scenario actually creates "
-                f"(e.g., expediting recovers late shipments but cannot recover "
-                f"a cut supply allocation, and its premiums rise in a "
-                f"shortage).")
+        st.info(f"Every number below answers *\"if {spec.name} occurs, what "
+                f"does this action buy us?\"* — each action is simulated on "
+                f"top of the scenario and compared against the scenario "
+                f"without it, on the same futures. The base-world EV column "
+                f"shows how the price shifts: an action only pays under "
+                f"stress if it relieves the constraint the scenario actually "
+                f"creates (e.g., expediting recovers late shipments but "
+                f"cannot recover a cut supply allocation, and its premiums "
+                f"rise in a shortage).")
     else:
         page_actions = action_results
         ref_kpi = base_kpi
+        st.caption("Actions are priced in the base world — the standing "
+                   "outlook. Select a scenario in the sidebar and this table "
+                   "reprices automatically in that world (with the base-world "
+                   "EV kept alongside). Use the checkboxes below to build the "
+                   "response package the rest of the app evaluates.")
 
     act_rows = []
     for name, (kpi, aspec) in page_actions.items():
         cmpv = compare_scenarios(ref_kpi, kpi, aspec.action_cost_usd)
-        act_rows.append({
+        row = {
             "Action": name,
             "In package": name in package_names,
             "Horizon": aspec.horizon,
@@ -946,7 +960,12 @@ with tabs[8]:
             "Δ working capital ($M)": cmpv["d_working_capital"] / 1e6,
             "Δ service (pts)": cmpv["d_service"] * 100,
             "Cost ($M)": aspec.action_cost_usd / 1e6,
-            "Incremental EV ($M)": cmpv["incremental_ev"] / 1e6})
+            "Incremental EV ($M)": cmpv["incremental_ev"] / 1e6}
+        if conditioned and name in action_results:
+            base_cmp = compare_scenarios(base_kpi, action_results[name][0],
+                                         aspec.action_cost_usd)
+            row["EV in base world ($M)"] = base_cmp["incremental_ev"] / 1e6
+        act_rows.append(row)
     adf = (pd.DataFrame(act_rows)
            .sort_values("Incremental EV ($M)", ascending=False)
            .set_index("Action"))

@@ -112,7 +112,8 @@ def quarterly_fan_chart(result: SimulationResult, plan_q: np.ndarray,
                    "", "Revenue ($M)")
 
 
-def inventory_trajectory(result: SimulationResult, target: float) -> go.Figure:
+def inventory_trajectory(result: SimulationResult, target: float,
+                         title_suffix: str = "") -> go.Figure:
     inv = result.inventory / 1e6
     m = month_labels()
     p5, p50, p95 = (np.percentile(inv, p, axis=0) for p in (5, 50, 95))
@@ -126,7 +127,8 @@ def inventory_trajectory(result: SimulationResult, target: float) -> go.Figure:
     fig.add_hline(y=target / 1e6, line=dict(color=INK, width=2, dash="dash"),
                   annotation_text=f"Target {fmt_money(target)}",
                   annotation_font=dict(size=11, color=INK))
-    return _layout(fig, "Month-end inventory trajectory vs target (18-month horizon)",
+    return _layout(fig, f"Month-end inventory trajectory vs target "
+                        f"(18-month horizon){title_suffix}",
                    "", "Inventory ($M)")
 
 
@@ -214,7 +216,8 @@ def scenario_comparison_chart(rows: list[dict]) -> go.Figure:
 # Heat maps and matrices
 # ---------------------------------------------------------------------------
 
-def utilization_heatmap(result: SimulationResult) -> go.Figure:
+def utilization_heatmap(result: SimulationResult,
+                        title_suffix: str = "") -> go.Figure:
     """EMS + integration expected utilization by month."""
     m = month_labels()
     rows = {
@@ -229,7 +232,8 @@ def utilization_heatmap(result: SimulationResult) -> go.Figure:
                                          tickfont=dict(color=MUTED)),
         hovertemplate="%{y} · %{x}: %{z:.0f}%<extra></extra>",
         xgap=2, ygap=2))
-    return _layout(fig, "Expected capacity utilization by month", "", "",
+    return _layout(fig, f"Expected capacity utilization by month{title_suffix}",
+                   "", "",
                    height=260, legend=False)
 
 

@@ -72,6 +72,10 @@ Every chart and table is exactly one of:
 - **Outcome view** — follows the evaluation context and *says so in its
   title* (context suffix) or in a banner.
 
+Page template for tabs that mix the two: **outcome views lead the page**
+(the decision question first), then an explicit divider and caption mark
+the switch to plan-of-record/input reference below — never interleaved.
+
 ### Three fixed reference frames
 
 All comparisons in the app reduce to these; no view invents its own:
@@ -162,7 +166,11 @@ Executive answer first, then the meeting's supporting flow:
   ambiguous screenshots.
 - **Recommendations price actions in a *world*, never in a context that
   already contains a package** (marginal-value-on-top-of-package is a
-  possible future refinement, priced explicitly if ever added).
+  possible future refinement, priced explicitly if ever added). The world is
+  the sidebar context's world, automatically — the page-local
+  evaluation-world toggle was removed (2026-08-10) as a second source of
+  truth; under a scenario the base-world EV stays visible as a comparison
+  column instead. Both frames at once, never toggled.
 - **The sim mean sits below the deterministic baseline by design** (capacity
   caps demand upside asymmetrically) — the risk-adjusted outlook story, not
   a bug.
