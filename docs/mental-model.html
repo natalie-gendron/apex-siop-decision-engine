@@ -1,0 +1,258 @@
+<title>Inputs · World · Response — the Apex SIOP mental model</title>
+<style>
+  :root {
+    --bg: #F7F8FA;
+    --surface: #FFFFFF;
+    --ink: #1F2833;
+    --muted: #66707C;
+    --line: #D6DBE1;
+    --belief: #3B6EA8;
+    --belief-soft: rgba(59, 110, 168, 0.10);
+    --belief-softer: rgba(59, 110, 168, 0.18);
+    --decision: #B5641F;
+    --decision-soft: rgba(181, 100, 31, 0.08);
+    --sans: "Avenir Next", "Avenir", "Segoe UI", system-ui, sans-serif;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #151A21;
+      --surface: #1C232C;
+      --ink: #E6EAF0;
+      --muted: #98A3B0;
+      --line: #333D49;
+      --belief: #82ABD8;
+      --belief-soft: rgba(130, 171, 216, 0.14);
+      --belief-softer: rgba(130, 171, 216, 0.24);
+      --decision: #D9945A;
+      --decision-soft: rgba(217, 148, 90, 0.12);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #151A21;
+    --surface: #1C232C;
+    --ink: #E6EAF0;
+    --muted: #98A3B0;
+    --line: #333D49;
+    --belief: #82ABD8;
+    --belief-soft: rgba(130, 171, 216, 0.14);
+    --belief-softer: rgba(130, 171, 216, 0.24);
+    --decision: #D9945A;
+    --decision-soft: rgba(217, 148, 90, 0.12);
+  }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    line-height: 1.55;
+    margin: 0;
+    padding: 3rem 1.25rem 4rem;
+  }
+  main { max-width: 780px; margin: 0 auto; display: flex; flex-direction: column; gap: 2.5rem; }
+  header h1 {
+    font-size: 1.7rem; font-weight: 600; letter-spacing: -0.01em;
+    margin: 0 0 0.35rem; text-wrap: balance;
+  }
+  header h1 .sep { color: var(--muted); font-weight: 400; }
+  header p { margin: 0; color: var(--muted); max-width: 60ch; }
+  .eq {
+    font-family: var(--mono); font-size: 0.95rem;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 6px;
+    padding: 0.7rem 1rem; overflow-x: auto; white-space: nowrap;
+  }
+  .eq b { font-weight: 600; }
+  .eq .w { color: var(--belief); }
+  .eq .r { color: var(--decision); }
+  section h2 {
+    font-size: 0.8rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--muted); margin: 0 0 0.75rem;
+    font-family: var(--mono);
+  }
+  figure { margin: 0; }
+  .fig-scroll { overflow-x: auto; }
+  figure svg { display: block; max-width: 100%; height: auto; min-width: 640px; }
+  figcaption { margin-top: 0.6rem; font-size: 0.88rem; color: var(--muted); max-width: 65ch; }
+  figcaption b { color: var(--ink); font-weight: 600; }
+
+  /* SVG shared classes — styled from page CSS, themed via tokens */
+  .box { fill: var(--surface); stroke: var(--line); rx: 6; }
+  .box-frozen { fill: var(--surface); stroke: var(--ink); stroke-width: 1.8; }
+  .box-world { fill: var(--belief-soft); stroke: var(--belief); }
+  .box-resp { fill: var(--decision-soft); stroke: var(--decision); }
+  .sub { fill: var(--surface); stroke: var(--line); }
+  .t-title { font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; fill: var(--ink); font-weight: 600; }
+  .t-title-w { fill: var(--belief); }
+  .t-title-r { fill: var(--decision); }
+  .t-body { font-family: var(--sans); font-size: 12.5px; fill: var(--ink); }
+  .t-small { font-family: var(--sans); font-size: 11px; fill: var(--muted); }
+  .t-tag { font-family: var(--mono); font-size: 10px; letter-spacing: 0.04em; fill: var(--muted); }
+  .arrow { stroke: var(--muted); stroke-width: 1.4; fill: none; }
+  .arrow-w { stroke: var(--belief); }
+  .arrow-r { stroke: var(--decision); }
+  .plan-line { stroke: var(--ink); stroke-width: 1.6; stroke-dasharray: 5 4; fill: none; }
+  .ghost { stroke: var(--muted); stroke-width: 1.2; fill: none; }
+  .center-w { stroke: var(--belief); stroke-width: 1.8; fill: none; }
+  .center-r { stroke: var(--decision); stroke-width: 1.8; fill: none; }
+  .fan { fill: var(--belief-soft); }
+  .fan-inner { fill: var(--belief-softer); }
+  .fan-r { fill: var(--decision-soft); }
+  .curve { stroke: var(--ink); stroke-width: 1.6; fill: var(--belief-soft); }
+
+  .matrix { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
+  .matrix th, .matrix td { border: 1px solid var(--line); padding: 0.65rem 0.8rem; text-align: left; vertical-align: top; }
+  .matrix th { font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); font-weight: 600; background: var(--surface); }
+  .matrix th.w { color: var(--belief); }
+  .matrix th.r { color: var(--decision); }
+  .matrix td { background: var(--bg); }
+  .matrix td b { font-weight: 600; }
+  .matrix-note { margin-top: 0.6rem; font-size: 0.88rem; color: var(--muted); max-width: 65ch; }
+  .tbl-scroll { overflow-x: auto; }
+</style>
+
+<main>
+  <header>
+    <h1>Inputs <span class="sep">·</span> World <span class="sep">·</span> Response</h1>
+    <p>The mental model behind the Apex SIOP engine — what each sidebar knob touches, and what it can never touch.</p>
+  </header>
+
+  <div class="eq">outcome distribution = Simulate(<b>inputs</b>, <b class="w">world</b>, <b class="r">response</b>) <span style="color: var(--muted)">— judged against the frozen plan</span></div>
+
+  <section>
+    <h2>1 — What feeds the simulation</h2>
+    <figure>
+      <div class="fig-scroll">
+      <svg viewBox="0 0 880 390" role="img" aria-label="Three lanes feed the Simulate step: the world (scenario plus demand confidence, beliefs with no cost), the frozen inputs (demand forecast and supply assumptions, never rewritten), and the response (a costed package of actions). Simulate emits an outcome distribution that is read against a dashed plan marker.">
+        <defs>
+          <marker id="arr-m" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0 0 L10 5 L0 10 Z" style="fill: var(--muted)"></path>
+          </marker>
+          <marker id="arr-w" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0 0 L10 5 L0 10 Z" style="fill: var(--belief)"></path>
+          </marker>
+          <marker id="arr-r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0 0 L10 5 L0 10 Z" style="fill: var(--decision)"></path>
+          </marker>
+        </defs>
+
+        <!-- WORLD group -->
+        <rect class="box-world" x="40" y="40" width="280" height="122" rx="8"></rect>
+        <text class="t-title t-title-w" x="56" y="62">WORLD</text>
+        <text class="t-tag" x="304" y="62" text-anchor="end">beliefs · no cost</text>
+        <rect class="sub" x="56" y="74" width="248" height="34" rx="4"></rect>
+        <text class="t-body" x="68" y="90">Scenario</text>
+        <text class="t-small" x="68" y="103">a chosen hypothesis</text>
+        <rect class="sub" x="56" y="116" width="248" height="34" rx="4"></rect>
+        <text class="t-body" x="68" y="132">Demand confidence</text>
+        <text class="t-small" x="68" y="145">assessed calibration — trust in the forecast</text>
+
+        <!-- INPUTS -->
+        <rect class="box-frozen" x="40" y="196" width="280" height="64" rx="6"></rect>
+        <text class="t-title" x="56" y="218">INPUTS — THE FROZEN PLAN</text>
+        <text class="t-small" x="56" y="237">demand forecast + supply assumptions</text>
+        <text class="t-tag" x="304" y="250" text-anchor="end">locked</text>
+
+        <!-- RESPONSE -->
+        <rect class="box-resp" x="40" y="304" width="280" height="56" rx="8"></rect>
+        <text class="t-title t-title-r" x="56" y="326">RESPONSE</text>
+        <text class="t-tag" x="304" y="326" text-anchor="end">decisions · costed</text>
+        <text class="t-small" x="56" y="345">a package of zero or more actions</text>
+
+        <!-- SIMULATE -->
+        <rect class="box" x="470" y="193" width="150" height="70" rx="8"></rect>
+        <text class="t-title" x="545" y="222" text-anchor="middle">SIMULATE</text>
+        <text class="t-tag" x="545" y="240" text-anchor="middle">monte carlo</text>
+
+        <!-- arrows into simulate -->
+        <path class="arrow arrow-w" d="M320 100 H400 V210 H462" marker-end="url(#arr-w)"></path>
+        <text class="t-tag" x="408" y="160" text-anchor="start" style="fill: var(--belief)">shapes the odds</text>
+
+        <path class="arrow" d="M320 228 H462" marker-end="url(#arr-m)"></path>
+        <text class="t-tag" x="392" y="246" text-anchor="middle">never rewritten</text>
+
+        <path class="arrow arrow-r" d="M320 332 H400 V250 H462" marker-end="url(#arr-r)"></path>
+        <text class="t-tag" x="408" y="292" text-anchor="start" style="fill: var(--decision)">priced in a world</text>
+
+        <!-- outcome distribution -->
+        <path class="arrow" d="M620 228 H648" marker-end="url(#arr-m)"></path>
+        <text class="t-title" x="660" y="172">OUTCOME — A DISTRIBUTION</text>
+        <path class="curve" d="M655 280 C 700 278, 712 198, 748 198 C 784 198, 796 274, 868 278 L868 280 Z"></path>
+        <line class="plan-line" x1="800" y1="188" x2="800" y2="280"></line>
+        <text class="t-tag" x="800" y="182" text-anchor="middle">plan</text>
+        <line class="ghost" x1="650" y1="280" x2="872" y2="280"></line>
+        <text class="t-small" x="660" y="300">read against the plan marker</text>
+      </svg>
+      </div>
+      <figcaption><b>Two of the three lanes are beliefs; one is a decision.</b> Scenario and confidence both live on the world axis and carry no cost — a scenario is a hypothesis you choose, confidence is evidence you assess. Only the response is something the business <i>does</i>, and it is always priced conditional on the world it runs in. The inputs lane is the yardstick: nothing upstream ever edits it.</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <h2>2 — What each knob does to the fan</h2>
+    <figure>
+      <div class="fig-scroll">
+      <svg viewBox="0 0 880 260" role="img" aria-label="Three panels. Confidence widens or narrows the uncertainty band around an unchanged plan line. A scenario shifts the whole band away while the dashed plan line stays put as the yardstick. A response bends the band partly back toward the plan, at a cost.">
+        <!-- Panel A: confidence -->
+        <g transform="translate(0, 20)">
+          <text class="t-title t-title-w" x="10" y="8">CONFIDENCE — CALIBRATION</text>
+          <polygon class="fan" points="10,170 270,50 270,190"></polygon>
+          <polygon class="fan-inner" points="10,170 270,85 270,155"></polygon>
+          <path class="plan-line" d="M10 170 L270 120"></path>
+          <text class="t-small" x="240" y="66" text-anchor="end">wide = low confidence</text>
+          <text class="t-small" x="235" y="103" text-anchor="end">narrow = high</text>
+          <line class="ghost" x1="10" y1="210" x2="270" y2="210"></line>
+          <text class="t-small" x="10" y="232">band widens or narrows — the line never moves</text>
+        </g>
+        <!-- Panel B: scenario -->
+        <g transform="translate(300, 20)">
+          <text class="t-title t-title-w" x="10" y="8">SCENARIO — HYPOTHESIS</text>
+          <polygon class="fan" points="10,170 270,130 270,200"></polygon>
+          <path class="center-w" d="M10 170 L270 165"></path>
+          <path class="plan-line" d="M10 170 L270 120"></path>
+          <text class="t-tag" x="262" y="112" text-anchor="end">plan</text>
+          <text class="t-small" x="262" y="185" text-anchor="end">scenario world</text>
+          <line class="ghost" x1="10" y1="210" x2="270" y2="210"></line>
+          <text class="t-small" x="10" y="232">the world shifts — the plan stays the yardstick</text>
+        </g>
+        <!-- Panel C: response -->
+        <g transform="translate(600, 20)">
+          <text class="t-title t-title-r" x="10" y="8">RESPONSE — DECISION</text>
+          <polygon class="fan-r" points="10,170 270,108 270,168"></polygon>
+          <path class="ghost" d="M10 170 L270 165" style="stroke-dasharray: 2 3"></path>
+          <path class="center-r" d="M10 170 C 100 178, 180 162, 270 138"></path>
+          <path class="plan-line" d="M10 170 L270 120"></path>
+          <text class="t-tag" x="262" y="112" text-anchor="end">plan</text>
+          <text class="t-small" x="262" y="182" text-anchor="end">unmitigated</text>
+          <text class="t-tag" x="150" y="200" style="fill: var(--decision)">$ package cost</text>
+          <line class="ghost" x1="10" y1="210" x2="270" y2="210"></line>
+          <text class="t-small" x="10" y="232">buys back part of the gap — at a cost</text>
+        </g>
+      </svg>
+      </div>
+      <figcaption><b>The distinction that matters most, drawn.</b> Confidence points <i>at</i> the forecast but operates on the band around it — it never moves the line. A scenario moves the simulated world; the dashed plan stays put because it is what everything is measured against. A response then claws back part of the gap, and unlike the other two knobs, it costs money.</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <h2>3 — Every page is a cell of world × response</h2>
+    <div class="tbl-scroll">
+      <table class="matrix">
+        <tr>
+          <th></th>
+          <th class="r">response = nothing</th>
+          <th class="r">response = package</th>
+        </tr>
+        <tr>
+          <th class="w">world = base</th>
+          <td><b>The standing outlook</b> — the default view of the business.</td>
+          <td><b>Base vs what we will do</b> — is the package worth it even if nothing goes wrong?</td>
+        </tr>
+        <tr>
+          <th class="w">world = scenario</th>
+          <td><b>Stress test, unmitigated</b> — how bad does it get if we do nothing?</td>
+          <td><b>The recommended plan under that world</b> — the package priced where it matters.</td>
+        </tr>
+      </table>
+    </div>
+    <p class="matrix-note">The sidebar sets the tuple (world, response) once — scenario picker, confidence knob, package multiselect — and every named view in the app is one of these four cells. Demand confidence rides along on the world axis in all of them.</p>
+  </section>
+</main>

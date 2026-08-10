@@ -1260,24 +1260,18 @@ cadence. The executive meeting exists to answer four questions, in order:
 *How much should we trust the plan? What could happen to it? What should we
 do about it?* — and then sign the result and record it. Every page in this
 app supports one of those questions.
-
-**The one idea behind every number.** Each simulated outcome distribution is
-
-> **outcome = Simulate(inputs, world, response)** — judged against a frozen
-> plan of record.
-
-- The **world** is what happens *to* Apex: the base assumptions (calibrated
-  by the Demand Confidence assessment on the Market Intelligence tab, or a
-  sidebar override of that level for what-ifs) plus an
-  optional **scenario** deviation — demand and/or supply, no cost attached.
-- The **response** is what Apex chooses to *do*: a package of management
-  actions from the claim-sheet catalog, each with a decision cost and a
-  realistic effective-date latency.
-
-The sidebar sets this **evaluation context** — scenario and response package
-together. Bullish or bearish postures are scenarios too: they are beliefs
-about the world, not decisions, and a response package should look sensible
-under the base case, not only under the posture that flatters it.
+        """)
+    st.iframe(Path(__file__).parent / "docs" / "mental-model.html")
+    st.markdown(
+        """
+**Reading the picture into practice.** The sidebar sets the evaluation
+context — world and response together. Bullish or bearish postures are
+scenarios too: beliefs about the world, not decisions, and a response
+package should look sensible under the base case, not only under the
+posture that flatters it. Actions come from the claim-sheet catalog, each
+with a decision cost and a realistic effective-date latency; the Demand
+Confidence backdrop is assessed on the Market Intelligence tab, with the
+sidebar override for what-ifs.
 
 **Two kinds of view.** Every chart and table is either **plan-of-record**
 (a frozen anchor that never moves with the context — the plan, targets, the
