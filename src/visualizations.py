@@ -426,6 +426,20 @@ def backlog_trajectory_chart(base_result: SimulationResult,
     return _layout(fig, title, "", "Systems past due", height=400)
 
 
+def past_due_family_chart(df: pd.DataFrame,
+                          title_suffix: str = "") -> go.Figure:
+    """Stacked expected past-due backlog by product family (months × families)."""
+    m = month_labels()
+    fig = go.Figure()
+    for i, fam in enumerate(df.columns):
+        fig.add_trace(go.Scatter(
+            x=m, y=df[fam], mode="lines", stackgroup="one",
+            line=dict(width=0.5, color=SERIES[i % len(SERIES)]), name=fam,
+            hovertemplate="%{x}: %{y:.0f} systems<extra>" + fam + "</extra>"))
+    return _layout(fig, f"Expected past-due backlog by family{title_suffix}",
+                   "", "Systems past due", height=400)
+
+
 def backlog_comparison_chart(base_curve: np.ndarray,
                              scen_curves: "dict[str, np.ndarray]") -> go.Figure:
     """Expected past-due backlog by month — one line per selected scenario

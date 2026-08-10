@@ -64,7 +64,9 @@ class SimulationResult:
     rework_cost: np.ndarray
     eo_reserve: np.ndarray           # (n_sims,) fiscal-year E&O reserve estimate
     family_revenue: np.ndarray       # (n_sims, n_months, n_families)
-    family_units: np.ndarray         # (n_sims, n_months, n_families)
+    family_units: np.ndarray         # (n_sims, n_months, n_families) recognized
+    family_shipped: np.ndarray       # (n_sims, n_months, n_families)
+    family_demand: np.ndarray        # (n_sims, n_months, n_families)
     units_shipped: np.ndarray        # (n_sims, n_months)
     units_demanded: np.ndarray       # (n_sims, n_months)
     ems_utilization: np.ndarray      # (n_sims, n_months)

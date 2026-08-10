@@ -75,6 +75,37 @@ def test_management_actions_run(data, config, baseline):
     assert np.isfinite(r.revenue).all()
 
 
+def test_family_arrays_reconcile_to_totals(base_result):
+    """Per-family shipped/demanded must sum to the aggregate arrays the
+    past-due curve uses (same measure, decomposed)."""
+    np.testing.assert_allclose(base_result.family_demand.sum(axis=2),
+                               base_result.units_demanded)
+    np.testing.assert_allclose(base_result.family_shipped.sum(axis=2),
+                               base_result.units_shipped)
+
+
+def test_catalog_from_text_matches_file_and_validates():
+    """The session what-if path (catalog_text) must load identically to the
+    repo file and reject claims the simulator cannot price."""
+    from pathlib import Path
+
+    text = (Path(__file__).parent.parent / "config"
+            / "management_actions.yaml").read_text(encoding="utf-8")
+    from_text = management_actions(catalog_text=text)
+    from_file = management_actions()
+    assert list(from_text) == list(from_file)
+    assert all(from_text[n].overrides == from_file[n].overrides
+               for n in from_file)
+    bad = ("actions:\n"
+           "  - name: Bad claim\n"
+           "    description: Uses a knob the simulator does not know.\n"
+           "    horizon: Tactical\n"
+           "    overrides:\n"
+           "      warp_drive_mult: 2.0\n")
+    with pytest.raises(ValueError, match="warp_drive_mult"):
+        management_actions(catalog_text=bad)
+
+
 def test_response_package_stacks_actions(data, config, baseline):
     """A response package = merged action overrides + summed decision cost;
     the simulator charges the cost to Q1 operating income and nothing else."""

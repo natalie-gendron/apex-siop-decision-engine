@@ -40,6 +40,7 @@ from src.scenarios import (
 from src.sensitivity import (
     all_driver_rankings,
     binding_components,
+    expected_past_due_by_family,
     expected_past_due_curve,
     family_revenue_at_risk,
     monthly_capacity_risk,
@@ -113,13 +114,16 @@ def cached_confidence(data_seed: int, intel_text: str | None, _data: InputData):
 
 @st.cache_data(show_spinner=False)
 def cached_actions(data_seed: int, sim_seed: int, n_sims: int,
-                   confidence_level: str, context_key: str,
-                   _data: InputData, _baseline, _context: dict):
+                   confidence_level: str, context_key: str, catalog_key: str,
+                   _data: InputData, _baseline, _context: dict,
+                   _catalog: dict):
     """Evaluate all actions on a given backdrop: confidence + optional scenario
-    context (empty context = the standing base-case evaluation)."""
+    context (empty context = the standing base-case evaluation). catalog_key
+    is derived from the claim-sheet contents, so edited or what-if catalogs
+    reprice instead of returning stale cached results."""
     conf = CONFIDENCE_SIM_PARAMS[confidence_level]
     out = {}
-    for name, spec in management_actions().items():
+    for name, spec in _catalog.items():
         stacked = merge_confidence_params(_context, spec.overrides)
         r = run_simulation(_data, CONFIG, _baseline,
                            params=merge_confidence_params(conf, stacked),
@@ -157,8 +161,33 @@ scenario_name = st.sidebar.selectbox(
     help="Exogenous demand/supply assumptions — what could happen TO the "
          "business. Base Case = current SIOP assumptions.")
 
-ACTIONS_CATALOG = management_actions()
-st.session_state.setdefault("package_names", [])
+# action catalog: the repo claim-sheet file, or a session-only what-if
+# upload from the Assumptions & Data page (demo of the analyst edit loop)
+_catalog_text = st.session_state.get("catalog_override_text")
+try:
+    ACTIONS_CATALOG = management_actions(catalog_text=_catalog_text)
+except (ValueError, KeyError, TypeError) as exc:
+    st.sidebar.warning(f"Session action catalog could not be used ({exc}); "
+                       "reverted to the repo catalog.")
+    st.session_state.pop("catalog_override_text", None)
+    _catalog_text = None
+    ACTIONS_CATALOG = management_actions()
+# content-derived cache key: action pricing re-runs when the claims change
+catalog_key = _params_key({n: [s.horizon, s.action_cost_usd, s.overrides]
+                           for n, s in ACTIONS_CATALOG.items()})
+if _catalog_text:
+    st.sidebar.info(f"Action catalog: session what-if "
+                    f"({len(ACTIONS_CATALOG)} actions). Not saved — the repo "
+                    f"file is the record.")
+    if st.sidebar.button("Revert to repo action catalog"):
+        st.session_state.pop("catalog_override_text", None)
+        st.session_state["catalog_upload_nonce"] = (
+            st.session_state.get("catalog_upload_nonce", 0) + 1)
+        st.rerun()
+
+st.session_state["package_names"] = [
+    n for n in st.session_state.get("package_names", [])
+    if n in ACTIONS_CATALOG]
 package_names = st.sidebar.multiselect(
     "Response package (what we will do)", list(ACTIONS_CATALOG),
     key="package_names",
@@ -299,7 +328,8 @@ else:
 
 progress.progress(0.7, text="Scoring management actions...")
 action_results = cached_actions(data_seed, sim_seed, min(n_sims, 2000),
-                                dc.level, "base", data, baseline, {})
+                                dc.level, "base", catalog_key,
+                                data, baseline, {}, ACTIONS_CATALOG)
 progress.progress(1.0, text="Done")
 progress.empty()
 
@@ -571,14 +601,22 @@ with tabs[1]:
     peak_m = int(pd_ctx_curve.argmax())
     dcols[3].metric("Peak expected past-due", f"{pd_ctx_curve.max():.0f} systems",
                     f"in {months[peak_m]}", delta_color="off")
-    st.plotly_chart(viz.backlog_trajectory_chart(base_result, ctx_result,
+    t1, t2 = st.columns(2)
+    t1.plotly_chart(viz.backlog_trajectory_chart(base_result, ctx_result,
                                                  context_label),
                     width='stretch', key="delinquency_trajectory")
+    t2.plotly_chart(viz.past_due_family_chart(
+        expected_past_due_by_family(ctx_result), ctx_suffix),
+        width='stretch', key="delinquency_family")
     st.caption("Past-due backlog = cumulative demand minus cumulative "
                "shipments across simulated futures, floored at zero "
                "(expected value; band = P25-P75 of the conditioned outlook). "
-               "Set a scenario and response package in the sidebar to see "
-               "projected delinquency for the world plus what we will do.")
+               "Left: how big and when. Right: what the queue is made of — "
+               "computed per family, so the stack can sit slightly above the "
+               "total curve (one family's early shipments cannot serve "
+               "another family's demand). Set a scenario and response package "
+               "in the sidebar to see projected delinquency for the world "
+               "plus what we will do.")
 
     st.divider()
     st.caption("Everything below is plan-of-record over the full 18-month "
@@ -938,7 +976,8 @@ with tabs[8]:
         with st.spinner(f"Pricing every action in the {spec.name} world..."):
             page_actions = cached_actions(data_seed, sim_seed, min(n_sims, 2000),
                                           dc.level, _params_key(spec.overrides),
-                                          data, baseline, spec.overrides)
+                                          catalog_key, data, baseline,
+                                          spec.overrides, ACTIONS_CATALOG)
         ref_kpi = world_kpi
         st.info(f"Every number below answers *\"if {spec.name} occurs, what "
                 f"does this action buy us?\"* — each action is simulated on "
@@ -1083,9 +1122,40 @@ with tabs[9]:
                "Recommendations page is computed from them. The overtime "
                "conversion premium comes from overtime_premium_pct in the EMS "
                "site table below (40-48% by site).")
-    claim_df = action_assumptions_table()
+    claim_df = action_assumptions_table(ACTIONS_CATALOG)
     st.dataframe(claim_df.style.format({"Decision cost": lambda v: fmt_money(v)}),
                  width='stretch', hide_index=True)
+
+    with st.expander("What-if: try a modified action catalog (session only)"):
+        st.caption("Upload an edited claim-sheet YAML to reprice every "
+                   "action, package and recommendation in this session — a "
+                   "demo of the analyst edit loop. Nothing is saved: the repo "
+                   "file (edited via pull request) remains the record, and a "
+                   "redeploy or the revert button in the sidebar restores it. "
+                   "New actions are priced and can join the response package; "
+                   "appearing in *ranked recommendations* additionally needs "
+                   "a risk-tag mapping in src/recommendations.py.")
+        catalog_path = Path(__file__).parent / "config" / "management_actions.yaml"
+        st.download_button("Download the current catalog as a starting point",
+                           catalog_path.read_text(encoding="utf-8"),
+                           file_name="management_actions.yaml",
+                           mime="text/yaml")
+        up_nonce = st.session_state.get("catalog_upload_nonce", 0)
+        up_yaml = st.file_uploader(
+            "management_actions.yaml", type=["yaml", "yml"],
+            label_visibility="collapsed", key=f"catalog_upload_{up_nonce}")
+        if up_yaml is not None:
+            new_catalog_text = up_yaml.getvalue().decode("utf-8")
+            try:
+                parsed = management_actions(catalog_text=new_catalog_text)
+            except (ValueError, KeyError, TypeError) as exc:
+                st.error(md(f"Catalog rejected: {exc}"))
+            else:
+                if st.session_state.get("catalog_override_text") != new_catalog_text:
+                    st.session_state["catalog_override_text"] = new_catalog_text
+                    st.rerun()
+                st.success(f"Session catalog active — {len(parsed)} actions "
+                           "validated and priced. Revert from the sidebar.")
 
     st.markdown("#### Factor model (correlations)")
     engine = FactorEngine(CONFIG.factors)

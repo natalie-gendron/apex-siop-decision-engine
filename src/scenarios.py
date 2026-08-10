@@ -71,21 +71,31 @@ def prebuilt_scenarios() -> dict[str, ScenarioSpec]:
 VALID_HORIZONS = ("Execution", "Tactical", "Long-lead")
 
 
-def management_actions(catalog_path: "str | None" = None) -> dict[str, ScenarioSpec]:
+def management_actions(catalog_path: "str | None" = None,
+                       catalog_text: "str | None" = None) -> dict[str, ScenarioSpec]:
     """Load the management-action catalog from config/management_actions.yaml.
 
     The catalog is the analyst-owned "claim sheet" layer: capability, cost and
     timing are authored there; the simulation computes the consequences. The
     file is validated on load (horizons, non-negative costs, and override keys
-    checked against the simulator's known parameters)."""
+    checked against the simulator's known parameters).
+
+    `catalog_text` parses a catalog from a YAML string instead of a file —
+    used by the session-only what-if upload on the Assumptions & Data page."""
     import yaml
 
     from .config import PROJECT_ROOT
     from .simulation import default_params
 
-    path = catalog_path or (PROJECT_ROOT / "config" / "management_actions.yaml")
-    with open(path, "r", encoding="utf-8") as fh:
-        raw = yaml.safe_load(fh)
+    if catalog_text is not None:
+        raw = yaml.safe_load(catalog_text)
+    else:
+        path = catalog_path or (PROJECT_ROOT / "config" / "management_actions.yaml")
+        with open(path, "r", encoding="utf-8") as fh:
+            raw = yaml.safe_load(fh)
+    if not isinstance(raw, dict) or "actions" not in raw:
+        raise ValueError("Catalog must be a YAML mapping with a top-level "
+                         "'actions' list.")
     known_keys = set(default_params())
     out: dict[str, ScenarioSpec] = {}
     for entry in raw["actions"]:
@@ -162,11 +172,12 @@ def describe_overrides(overrides: dict[str, Any]) -> str:
     return "; ".join(bits)
 
 
-def action_assumptions_table() -> "pd.DataFrame":
+def action_assumptions_table(
+        actions: "dict[str, ScenarioSpec] | None" = None) -> "pd.DataFrame":
     """The full claim-sheet table for the Assumptions & Data page."""
     import pandas as pd
     rows = []
-    for name, spec in management_actions().items():
+    for name, spec in (actions or management_actions()).items():
         rows.append({
             "Action": name, "Horizon": spec.horizon,
             "Decision cost": spec.action_cost_usd,

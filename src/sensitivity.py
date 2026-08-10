@@ -57,6 +57,17 @@ def expected_past_due_curve(result: SimulationResult) -> np.ndarray:
     return np.clip(cum, 0, None).mean(axis=0)
 
 
+def expected_past_due_by_family(result: SimulationResult) -> pd.DataFrame:
+    """Expected past-due backlog by month and product family (months × families).
+
+    Computed per family before flooring at zero, because one family's early
+    shipments cannot serve another family's demand — so the stacked sum can
+    slightly exceed the aggregate past-due curve."""
+    cum = np.cumsum(result.family_demand - result.family_shipped, axis=1)
+    return pd.DataFrame(np.clip(cum, 0, None).mean(axis=0),
+                        columns=PRODUCT_FAMILIES)
+
+
 def binding_components(result: SimulationResult, top_n: int = 8) -> pd.DataFrame:
     """Components most frequently binding on shipments across simulations."""
     rows = [{"component": name, "binding_frequency": float(mask.mean())}
