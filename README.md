@@ -190,3 +190,17 @@ materiality, dynamic summary, Excel export integrity).
 4. Bayesian updating of factor states from actuals (rolling SIOP learning).
 5. Optional LLM narrative provider behind the existing abstraction.
 6. PowerPoint export; distribution fitting from history.
+
+## License and provenance
+
+Copyright © 2026 Natalie Gendron. All rights reserved — see [LICENSE](LICENSE).
+
+This is **independent portfolio work**, built to demonstrate an approach to executive SIOP risk
+and scenario modeling. The repository is public so the work can be read and evaluated; it is
+**not open source**. Commercial, production, or internal business use requires written
+permission.
+
+**Every figure in this repository is fictional.** The manufacturer, demand plans, supply
+constraints, financials, and risk scenarios were invented for demonstration. Nothing here
+represents or derives from the confidential information or actual economics of any real
+organization — that was a deliberate design constraint, not an omission.
