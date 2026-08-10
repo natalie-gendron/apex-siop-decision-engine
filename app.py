@@ -40,13 +40,14 @@ from src.scenarios import (
 from src.sensitivity import (
     all_driver_rankings,
     binding_components,
+    expected_past_due_curve,
     family_revenue_at_risk,
     monthly_capacity_risk,
     quarter_shift_drivers,
     site_disruption_frequency,
 )
 from src.simulation import run_simulation
-from src.utils import MARKET_SEGMENTS, fmt_money, fmt_pct, fmt_pts
+from src.utils import MARKET_SEGMENTS, fmt_money, fmt_pct, fmt_pts, month_labels
 from src.validation import validate_inputs
 from src import visualizations as viz
 
@@ -415,45 +416,61 @@ with tabs[0]:
                    f"do we land?\"* Tiles compare against the frozen plan of "
                    f"record; the strip below prices this context against the "
                    f"standing base-case outlook.{cost_note}"))
-    # tiles grouped by clock: quarter (the commitment), fiscal year (the
-    # plan), year-end position — every label carries its window
-    st.markdown("##### This quarter — do we ship it?")
-    q1c, q2c, q3c = st.columns(3)
-    q1c.metric("Expected Q1 revenue", fmt_money(k["q1_revenue"]["mean"]),
-               f"{fmt_money(k['q1_revenue']['mean'] - k['q1_plan'])} vs plan")
-    q2c.metric("P(Q1 revenue plan)", fmt_pct(k["p_q1_plan"], 0))
-    q3c.metric("Q1 revenue at risk (P5 vs plan)",
-               fmt_money(k["q1_revenue_at_risk"]))
-    st.markdown("##### Full year — do we make the plan?")
-    y1, y2, y3, y4 = st.columns(4)
-    y1.metric("Expected FY revenue", fmt_money(k["fy_revenue"]["mean"]),
-              f"{fmt_money(k['fy_revenue']['mean'] - k['fy_plan'])} vs plan")
-    y2.metric("P(FY revenue plan)", fmt_pct(k["p_fy_plan"], 0))
-    y3.metric("Expected FY gross margin", fmt_pct(k["fy_gm"]["mean"]),
-              f"{100 * (k['fy_gm']['mean'] - k['gm_target']):+.1f} pts vs target")
-    y4.metric("P(FY margin target)", fmt_pct(k["p_gm_target"], 0))
-    st.markdown("##### Year-end position — cash, stock, service")
-    p1, p2, p3, p4 = st.columns(4)
-    p1.metric("Year-end inventory", fmt_money(k["ending_inventory"]["mean"]),
-              f"{fmt_money(k['ending_inventory']['mean'] - k['inventory_target'])} "
-              f"vs target", delta_color="inverse")
-    p2.metric("Year-end working capital", fmt_money(k["working_capital"]["mean"]))
-    p3.metric("FY service level (fill rate)", fmt_pct(k["service_level"]["mean"]))
-    p4.metric("FY revenue at risk (P5 vs plan)", fmt_money(k["fy_revenue_at_risk"]))
+    # tiles grouped by clock in bordered cards, all on the same 4-wide grid
+    # so every tile has the same width — every label carries its window
+    with st.container(border=True):
+        st.markdown("##### This quarter — do we ship it?")
+        q = st.columns(4)
+        q[0].metric("Expected Q1 revenue", fmt_money(k["q1_revenue"]["mean"]),
+                    f"{fmt_money(k['q1_revenue']['mean'] - k['q1_plan'])} vs plan")
+        q[1].metric("P(Q1 revenue plan)", fmt_pct(k["p_q1_plan"], 0))
+        q[2].metric("Expected Q1 gross margin", fmt_pct(k["q1_gm"]["mean"]))
+        q[3].metric("Q1 revenue at risk (P5 vs plan)",
+                    fmt_money(k["q1_revenue_at_risk"]))
+    with st.container(border=True):
+        st.markdown("##### Full year — do we make the plan?")
+        y = st.columns(4)
+        y[0].metric("Expected FY revenue", fmt_money(k["fy_revenue"]["mean"]),
+                    f"{fmt_money(k['fy_revenue']['mean'] - k['fy_plan'])} vs plan")
+        y[1].metric("P(FY revenue plan)", fmt_pct(k["p_fy_plan"], 0))
+        y[2].metric("Expected FY gross margin", fmt_pct(k["fy_gm"]["mean"]),
+                    f"{100 * (k['fy_gm']['mean'] - k['gm_target']):+.1f} pts "
+                    f"vs target")
+        y[3].metric("P(FY margin target)", fmt_pct(k["p_gm_target"], 0))
+    with st.container(border=True):
+        st.markdown("##### Year-end position — cash, stock, service")
+        p = st.columns(4)
+        p[0].metric("Year-end inventory", fmt_money(k["ending_inventory"]["mean"]),
+                    f"{fmt_money(k['ending_inventory']['mean'] - k['inventory_target'])} "
+                    f"vs target", delta_color="inverse")
+        p[1].metric("Year-end working capital",
+                    fmt_money(k["working_capital"]["mean"]))
+        p[2].metric("FY service level (fill rate)",
+                    fmt_pct(k["service_level"]["mean"]))
+        p[3].metric("FY revenue at risk (P5 vs plan)",
+                    fmt_money(k["fy_revenue_at_risk"]))
 
     if ctx_cmp:
-        st.markdown(f"#### What {context_label} changes vs the base outlook")
-        cc = st.columns(6 if package_specs else 5)
-        cc[0].metric("Δ expected FY revenue", fmt_money(ctx_cmp["d_fy_revenue"]))
-        cc[1].metric("Δ P(Q1 plan)", fmt_pts(ctx_cmp["d_p_q1_plan"]))
-        cc[2].metric("Δ P(FY plan)", fmt_pts(ctx_cmp["d_p_fy_plan"]))
-        cc[3].metric("Δ FY gross margin", fmt_pts(ctx_cmp["d_fy_gm"]))
-        cc[4].metric("Δ year-end inventory", fmt_money(ctx_cmp["d_inventory"]),
-                     delta_color="off")
-        if package_specs:
-            cc[5].metric("FY incremental EV (net of cost)",
-                         fmt_money(ctx_cmp["incremental_ev"]),
-                         f"cost {fmt_money(package_cost)}", delta_color="off")
+        with st.container(border=True):
+            st.markdown(f"##### What {context_label} changes vs the base outlook")
+            r1 = st.columns(4)
+            r1[0].metric("Δ Q1 revenue", fmt_money(ctx_cmp["d_q1_revenue"]))
+            r1[1].metric("Δ P(Q1 plan)", fmt_pts(ctx_cmp["d_p_q1_plan"]))
+            r1[2].metric("Δ FY revenue", fmt_money(ctx_cmp["d_fy_revenue"]))
+            r1[3].metric("Δ P(FY plan)", fmt_pts(ctx_cmp["d_p_fy_plan"]))
+            r2 = st.columns(4)
+            r2[0].metric("Δ FY gross margin", fmt_pts(ctx_cmp["d_fy_gm"]))
+            r2[1].metric("Δ year-end inventory", fmt_money(ctx_cmp["d_inventory"]),
+                         delta_color="off")
+            r2[2].metric("FY revenue-at-risk reduced",
+                         fmt_money(ctx_cmp["d_revenue_at_risk"]))
+            if package_specs:
+                r2[3].metric("FY incremental EV (net of cost)",
+                             fmt_money(ctx_cmp["incremental_ev"]),
+                             f"cost {fmt_money(package_cost)}",
+                             delta_color="off")
+            else:
+                r2[3].metric("Δ FY service level", fmt_pts(ctx_cmp["d_service"]))
         st.plotly_chart(viz.context_bridge(
             base_kpi, world_kpi, ctx_kpi, spec.name,
             package_label if package_specs else None), width='stretch')
@@ -517,9 +534,11 @@ with tabs[0]:
 
 # ---------------------------- 2. Demand & Backlog --------------------------
 with tabs[1]:
-    st.caption("Plan-of-record views over the full 18-month planning horizon "
-               "(monthly buckets from 2026-07). Fiscal-year figures elsewhere "
-               "cover the first 12 months; Q1 the first 3.")
+    st.caption("The views down to the demand plan are plan-of-record over the "
+               "full 18-month planning horizon (monthly buckets from 2026-07); "
+               "they never move with the sidebar. The projected-delinquency "
+               "section at the bottom is an outcome view and follows the "
+               "evaluation context.")
     st.plotly_chart(viz.monthly_revenue_chart(baseline), width='stretch')
     st.plotly_chart(viz.backlog_aging_chart(baseline), width='stretch')
     st.markdown("#### Demand plan (customer × family × month)")
@@ -528,6 +547,33 @@ with tabs[1]:
     pivot = dem.pivot_table(index=["customer", "product_family"], columns="month",
                             values="units", aggfunc="sum").fillna(0).astype(int)
     st.dataframe(pivot, width='stretch', height=420)
+
+    st.divider()
+    st.markdown(f"#### Projected delinquency — outcome view{ctx_suffix}")
+    pd_base_curve = expected_past_due_curve(base_result)
+    pd_ctx_curve = (pd_base_curve if ctx_result is base_result else
+                    expected_past_due_curve(ctx_result))
+    months = month_labels()
+    dcols = st.columns(4)
+    for col, label, m_idx in [
+            (dcols[0], "Expected past-due at Q1 end", 2),
+            (dcols[1], "Expected past-due at FY end", 11),
+            (dcols[2], "Expected past-due at horizon end", 17)]:
+        col.metric(label, f"{pd_ctx_curve[m_idx]:.0f} systems",
+                   None if ctx_result is base_result else
+                   f"{pd_ctx_curve[m_idx] - pd_base_curve[m_idx]:+.0f} vs base",
+                   delta_color="inverse")
+    peak_m = int(pd_ctx_curve.argmax())
+    dcols[3].metric("Peak expected past-due", f"{pd_ctx_curve.max():.0f} systems",
+                    f"in {months[peak_m]}", delta_color="off")
+    st.plotly_chart(viz.backlog_trajectory_chart(base_result, ctx_result,
+                                                 context_label),
+                    width='stretch', key="delinquency_trajectory")
+    st.caption("Past-due backlog = cumulative demand minus cumulative "
+               "shipments across simulated futures, floored at zero "
+               "(expected value; band = P25-P75 of the conditioned outlook). "
+               "Set a scenario and response package in the sidebar to see "
+               "projected delinquency for the world plus what we will do.")
 
 # --------------- 3. Market Intelligence & Demand Confidence ----------------
 with tabs[2]:
@@ -812,14 +858,14 @@ with tabs[7]:
             "d_inventory": "Δ year-end inventory",
             "d_working_capital": "Δ year-end working capital",
             "d_expedite": "Δ FY expedite cost", "d_service": "Δ FY service",
-            "d_revenue_at_risk": "Δ FY revenue at risk",
+            "d_revenue_at_risk": "FY revenue-at-risk reduced",
             "action_cost": "Decision cost",
             "incremental_ev": "FY incremental EV",
             "risk_reduced_per_dollar": "Risk reduced per dollar"}
         money = {"Δ Q1 revenue", "Δ FY revenue", "Δ FY gross profit",
                  "Δ year-end inventory", "Δ year-end working capital",
-                 "Δ FY expedite cost", "Δ FY revenue at risk", "Decision cost",
-                 "FY incremental EV"}
+                 "Δ FY expedite cost", "FY revenue-at-risk reduced",
+                 "Decision cost", "FY incremental EV"}
         pts = {"Δ P(Q1 plan)", "Δ P(FY plan)", "Δ FY gross margin",
                "Δ FY service"}
         disp = (pd.DataFrame(rows).set_index("scenario")
@@ -833,11 +879,12 @@ with tabs[7]:
                         width='stretch')
     st.plotly_chart(viz.backlog_trajectory_chart(base_result, ctx_result,
                                                  context_label),
-                    width='stretch')
+                    width='stretch', key="scen_cmp_trajectory")
     st.caption("Past-due backlog = cumulative demand minus cumulative shipments "
-               "across simulated futures (expected value; band = scenario "
+               "across simulated futures (expected value; band = conditioned "
                "P25-P75). The plan-of-record backlog view on Demand & Backlog "
-               "deliberately does not change with scenario — this one does.")
+               "deliberately does not change with the context — its "
+               "projected-delinquency section (same view as this) does.")
 
 # ---------------------------- 8. Management Actions ------------------------
 with tabs[8]:

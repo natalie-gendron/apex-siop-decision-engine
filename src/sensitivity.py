@@ -50,6 +50,13 @@ def all_driver_rankings(result: SimulationResult) -> dict[str, pd.DataFrame]:
     return {name: driver_ranking(result, name) for name in outcome_arrays(result)}
 
 
+def expected_past_due_curve(result: SimulationResult) -> np.ndarray:
+    """Expected past-due backlog (systems) by month: cumulative demand minus
+    cumulative shipments, floored at zero, averaged across simulations."""
+    cum = np.cumsum(result.units_demanded - result.units_shipped, axis=1)
+    return np.clip(cum, 0, None).mean(axis=0)
+
+
 def binding_components(result: SimulationResult, top_n: int = 8) -> pd.DataFrame:
     """Components most frequently binding on shipments across simulations."""
     rows = [{"component": name, "binding_frequency": float(mask.mean())}
