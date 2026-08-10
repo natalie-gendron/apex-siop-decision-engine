@@ -292,22 +292,18 @@ except (ValueError, KeyError) as exc:
 # allows what-ifs at other levels but is always labeled as an override.
 with confidence_slot:
     conf_choice = st.selectbox(
-        "Demand confidence (trust in the plan)",
+        "Demand confidence (trust in the forecast)",
         ["Assessed"] + CONFIDENCE_LEVELS,
         format_func=lambda o: (f"Assessed — {dc.level}" if o == "Assessed"
                                else o),
-        help="How much to trust the demand plan, applied to every simulation. "
-             "'Assessed' uses the level derived from market signals and "
-             "external intelligence (Market Intelligence tab); picking a "
-             "level instead is a what-if override. Confidence never rewrites "
-             "the demand plan — it calibrates demand volatility, push-out "
-             "and cancellation assumptions around it.")
-    with st.popover("What each level does", width="stretch"):
-        st.dataframe(confidence_mapping_table(
-            dc.level if conf_choice == "Assessed" else conf_choice,
-            plain_language=False), width='stretch', hide_index=True)
-        st.caption("→ marks the level being applied. Moderate = the base "
-                   "rates estimated from history, unadjusted.")
+        help="How much to trust the demand forecast, applied to every "
+             "simulation. 'Assessed' uses the level derived from "
+             "market signals and external intelligence (Market Intelligence "
+             "tab); picking a level instead is a what-if override. "
+             "Confidence never rewrites the demand plan — it calibrates "
+             "demand volatility, push-out and cancellation assumptions "
+             "around it. The full level mapping is on the Market "
+             "Intelligence tab.")
 effective_level = dc.level if conf_choice == "Assessed" else conf_choice
 confidence_overridden = effective_level != dc.level
 if confidence_overridden:
