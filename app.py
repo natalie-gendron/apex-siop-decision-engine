@@ -147,8 +147,20 @@ sim_seed = int(st.sidebar.number_input(
 mode = st.sidebar.selectbox("Simulation mode", list(SIM_MODES), index=1)
 n_sims = SIM_MODES[mode]
 
+# Evaluation context = (world, response): a scenario describes the world
+# (exogenous, no cost); a response package is what Apex chooses to do
+# (costed, latency-ramped actions from the claim-sheet catalog).
 scen_names = list(prebuilt_scenarios()) + ["Custom Scenario"]
-scenario_name = st.sidebar.selectbox("Scenario", scen_names, index=0)
+scenario_name = st.sidebar.selectbox(
+    "Scenario (the world)", scen_names, index=0,
+    help="Exogenous demand/supply assumptions — what could happen TO the "
+         "business. Base Case = current SIOP assumptions.")
+
+ACTIONS_CATALOG = management_actions()
+package_names = st.sidebar.multiselect(
+    "Response package (what we will do)", list(ACTIONS_CATALOG),
+    help="Management actions evaluated together on top of the selected "
+         "scenario, with their combined cost. Empty = no action taken.")
 
 custom_params: dict = {}
 if scenario_name == "Custom Scenario":
@@ -172,9 +184,11 @@ if scenario_name == "Custom Scenario":
         integ = st.slider("Integration capacity multiplier", 0.8, 1.3, 1.0, 0.02)
         freight = st.slider("Freight cost multiplier", 0.8, 2.0, 1.0, 0.05)
         exp_p = st.slider("Expedite premium multiplier", 0.5, 2.5, 1.0, 0.1)
-        ss = st.slider("Safety-stock multiplier", 0.4, 2.0, 1.0, 0.1)
-        resv = st.slider("Reserved EMS capacity (+std units/mo)", 0.0, 12.0, 0.0, 1.0)
         acc = st.slider("Acceptance delay probability (+pts)", 0.0, 0.3, 0.0, 0.02)
+        st.caption("These knobs describe the world (demand and supply "
+                   "environment). Things Apex chooses to do — safety stock, "
+                   "reserved capacity, overtime — are management actions; add "
+                   "them to the response package instead.")
         for key, val, default in [
             ("pushout_prob_add", push, 0.0), ("pullin_prob_add", pull, 0.0),
             ("cancel_prob_mult", cancel, 1.0), ("asp_mult", aspm, 1.0),
@@ -182,7 +196,7 @@ if scenario_name == "Custom Scenario":
             ("fpy_delta", fpy, 0.0), ("adherence_delta", adh, 0.0),
             ("integration_capacity_mult", integ, 1.0),
             ("freight_mult", freight, 1.0), ("expedite_premium_mult", exp_p, 1.0),
-            ("safety_stock_mult", ss, 1.0), ("acceptance_delay_add", acc, 0.0),
+            ("acceptance_delay_add", acc, 0.0),
         ]:
             if abs(val - default) > 1e-9:
                 custom_params[key] = val
@@ -190,9 +204,6 @@ if scenario_name == "Custom Scenario":
             custom_params["ems_capacity_mult"] = {
                 s: emsc for s in ["EMS Americas", "EMS Malaysia", "EMS Taiwan",
                                   "EMS Eastern Europe"]}
-        if resv > 0:
-            custom_params["ems_capacity_add"] = {"EMS Taiwan": resv * 0.6,
-                                                 "EMS Americas": resv * 0.4}
 
 if st.sidebar.button("Regenerate synthetic data",
                      help="Rebuild all synthetic tables with the selected seed."):
@@ -259,9 +270,29 @@ def sim_with_confidence(n: int, name: str, overrides: dict):
                              data, baseline, merged)
 
 
+# ---- evaluation context: (world, response) --------------------------------
+package_specs = [ACTIONS_CATALOG[n] for n in package_names]
+package_cost = float(sum(a.action_cost_usd for a in package_specs))
+package_overrides: dict = {}
+for a in package_specs:   # later actions win collisions; adds sum, mults multiply
+    package_overrides = merge_confidence_params(package_overrides, a.overrides)
+package_label = (f"response package ({len(package_specs)} "
+                 f"action{'s' if len(package_specs) != 1 else ''})")
+
 base_result = sim_with_confidence(n_sims, "Base Case", {})
-scen_result = (base_result if spec.name == "Base Case" else
-               sim_with_confidence(n_sims, spec.name, spec.overrides))
+world_result = (base_result if spec.name == "Base Case" else
+                sim_with_confidence(n_sims, spec.name, spec.overrides))
+if package_specs:
+    context_label = ((f"{spec.name} + " if spec.name != "Base Case" else "")
+                     + package_label)
+    final_overrides = merge_confidence_params(spec.overrides, package_overrides)
+    # the sim spreads the one-time decision cost over Q1 operating income
+    final_overrides["action_cost_usd"] = package_cost
+    ctx_result = sim_with_confidence(n_sims, context_label, final_overrides)
+else:
+    context_label = spec.name
+    ctx_result = world_result
+
 progress.progress(0.7, text="Scoring management actions...")
 action_results = cached_actions(data_seed, sim_seed, min(n_sims, 2000),
                                 dc.level, "base", data, baseline, {})
@@ -269,51 +300,55 @@ progress.progress(1.0, text="Done")
 progress.empty()
 
 base_kpi = kpi_summary(base_result, baseline, CONFIG)
-scen_kpi = kpi_summary(scen_result, baseline, CONFIG)
-scen_cmp = (compare_scenarios(base_kpi, scen_kpi, spec.action_cost_usd)
-            if spec.name != "Base Case" else None)
+world_kpi = (base_kpi if world_result is base_result else
+             kpi_summary(world_result, baseline, CONFIG))
+ctx_kpi = (world_kpi if ctx_result is world_result else
+           kpi_summary(ctx_result, baseline, CONFIG))
+ctx_cmp = (compare_scenarios(base_kpi, ctx_kpi, package_cost)
+           if ctx_result is not base_result else None)
 
 binding = binding_components(base_result)
 fam_risk = family_revenue_at_risk(base_result, baseline)
 cap_risk = monthly_capacity_risk(base_result)
 rankings = all_driver_rankings(base_result)
 
-# scenario-conditioned views for the Supply and Risk Drivers pages (identical
-# to the base views when the Base Case is selected)
-if scen_result is base_result:
-    scen_binding, scen_fam_risk, scen_cap_risk = binding, fam_risk, cap_risk
-    scen_rankings = rankings
+# context-conditioned views for the outcome pages (identical to the base
+# views when the context is (Base Case, no actions))
+if ctx_result is base_result:
+    ctx_binding, ctx_fam_risk, ctx_cap_risk = binding, fam_risk, cap_risk
+    ctx_rankings = rankings
 else:
-    scen_binding = binding_components(scen_result)
-    scen_fam_risk = family_revenue_at_risk(scen_result, baseline)
-    scen_cap_risk = monthly_capacity_risk(scen_result)
-    scen_rankings = all_driver_rankings(scen_result)
-scen_suffix = "" if scen_result is base_result else f" — {spec.name}"
+    ctx_binding = binding_components(ctx_result)
+    ctx_fam_risk = family_revenue_at_risk(ctx_result, baseline)
+    ctx_cap_risk = monthly_capacity_risk(ctx_result)
+    ctx_rankings = all_driver_rankings(ctx_result)
+ctx_suffix = "" if ctx_result is base_result else f" — {context_label}"
 risks = detect_risks(base_kpi, binding, dc)
 recs = build_recommendations(base_kpi, action_results, binding,
                              demand_confidence=dc)
 
-# plan-of-record narrative — anchors the Excel export regardless of scenario
+# plan-of-record narrative — anchors the Excel export regardless of context
 provider = get_provider("rules")
-ctx = ReportContext(kpi=base_kpi, risks=risks, binding=binding,
-                    family_risk=fam_risk, capacity_risk=cap_risk,
-                    recommendations=recs, scenario_kpi=scen_kpi if scen_cmp else None,
-                    scenario_compare=scen_cmp,
-                    driver_ranking=rankings["FY revenue"],
-                    demand_confidence=dc)
-summary_text = provider.executive_summary(ctx)
+report_ctx = ReportContext(kpi=base_kpi, risks=risks, binding=binding,
+                           family_risk=fam_risk, capacity_risk=cap_risk,
+                           recommendations=recs,
+                           scenario_kpi=ctx_kpi if ctx_cmp else None,
+                           scenario_compare=ctx_cmp,
+                           driver_ranking=rankings["FY revenue"],
+                           demand_confidence=dc)
+summary_text = provider.executive_summary(report_ctx)
 
-# scenario-conditioned counterparts for the Executive Overview (outcome page)
-if scen_result is base_result:
-    scen_risks, overview_summary = risks, summary_text
+# context-conditioned counterparts for the Executive Overview (outcome page)
+if ctx_result is base_result:
+    ctx_risks, overview_summary = risks, summary_text
 else:
-    scen_risks = detect_risks(scen_kpi, scen_binding, dc)
+    ctx_risks = detect_risks(ctx_kpi, ctx_binding, dc)
     overview_summary = provider.executive_summary(ReportContext(
-        kpi=scen_kpi, risks=scen_risks, binding=scen_binding,
-        family_risk=scen_fam_risk, capacity_risk=scen_cap_risk,
-        recommendations=recs, scenario_kpi=scen_kpi, scenario_compare=scen_cmp,
-        driver_ranking=scen_rankings["FY revenue"], demand_confidence=dc,
-        conditioned_on=spec.name))
+        kpi=ctx_kpi, risks=ctx_risks, binding=ctx_binding,
+        family_risk=ctx_fam_risk, capacity_risk=ctx_cap_risk,
+        recommendations=recs, scenario_kpi=ctx_kpi, scenario_compare=ctx_cmp,
+        driver_ranking=ctx_rankings["FY revenue"], demand_confidence=dc,
+        conditioned_on=context_label))
 
 # ---------------------------------------------------------------------------
 # Header + tabs
@@ -326,30 +361,54 @@ def md(text: str) -> str:
 
 st.title("Apex Test Systems — SIOP Risk & Scenario Engine")
 st.caption(f"18-month horizon from 2026-07 · scenario: **{spec.name}** · "
+           f"response package: "
+           f"**{f'{len(package_specs)} actions' if package_specs else 'none'}** · "
            f"demand confidence: **{dc.level}** · {n_sims:,} simulations · "
            f"data seed {data_seed} · sim seed {sim_seed} · all data synthetic")
 
+# Tab order deliberately follows the SIOP process: the executive answer
+# first, then demand review, supply review, integrated reconciliation,
+# decision support, and governance. The last tab carries the process guide.
 tabs = st.tabs([
     "Executive Overview", "Demand & Backlog",
     "Market Intelligence & Demand Confidence", "Supply & Component Risk",
     "Manufacturing Capacity", "Financial Outcomes", "Risk Drivers",
     "Scenario Comparison", "Management Recommendations", "Assumptions & Data",
-    "Export & Methodology",
+    "Guide, Methodology & Export",
 ])
 
 # ---------------------------- 1. Executive Overview ------------------------
-# Outcome page: everything follows the selected scenario (design rule — a view
-# is either plan-of-record or outcome). Plan/targets stay the frozen anchors
-# in the tile deltas; the strip below the tiles prices the scenario vs base.
+# Outcome page: everything follows the evaluation context (world, response) —
+# design rule: a view is either plan-of-record or outcome. Plan/targets stay
+# the frozen anchors in the tile deltas; the strip below the tiles prices the
+# context vs the standing base outlook; the bridge decomposes the move.
 with tabs[0]:
-    k = scen_kpi
-    if scen_result is not base_result:
-        st.info(f"Conditioned on the **{spec.name}** scenario — every figure on "
-                f"this page answers *\"if this happens, where do we land?\"* "
-                f"Tiles compare against the frozen plan of record; the strip "
-                f"below them prices the scenario against the standing base-case "
-                f"outlook. Select Base Case in the sidebar for the "
-                f"plan-of-record view.")
+    k = ctx_kpi
+    with st.expander("How to read this page"):
+        st.markdown(md(
+            "Every view in this app is one of two kinds: **plan-of-record** "
+            "(frozen anchors — the plan, targets, the deterministic baseline) "
+            "or **outcome** (follows the evaluation context you set in the "
+            "sidebar). The context has two parts: a **scenario** — the world, "
+            "what could happen *to* Apex (exogenous, no cost) — and a "
+            "**response package** — what Apex chooses to *do* (costed, "
+            "latency-ramped management actions).\n\n"
+            "This page is an outcome page. The tiles answer *\"in this "
+            "context, do we still make plan?\"* — deltas are always against "
+            "the frozen plan of record. The strip below them answers *\"what "
+            "does this context change vs the standing base outlook (no "
+            "scenario, no actions)?\"*, and the bridge splits that move into "
+            "what the world does to us and what our response recovers. Full "
+            "guide on the last tab."))
+    if ctx_result is not base_result:
+        cost_note = (f" The package's {fmt_money(package_cost)} decision cost "
+                     f"is charged to Q1 operating income." if package_cost
+                     else "")
+        st.info(md(f"Conditioned on **{context_label}** — every figure on "
+                   f"this page answers *\"if this happens and we act, where "
+                   f"do we land?\"* Tiles compare against the frozen plan of "
+                   f"record; the strip below prices this context against the "
+                   f"standing base-case outlook.{cost_note}"))
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Expected Q1 revenue", fmt_money(k["q1_revenue"]["mean"]),
               f"{fmt_money(k['q1_revenue']['mean'] - k['q1_plan'])} vs plan")
@@ -365,31 +424,53 @@ with tabs[0]:
     c7.metric("Service level (fill rate)", fmt_pct(k["service_level"]["mean"]))
     c8.metric("FY revenue at risk (P5)", fmt_money(k["fy_revenue_at_risk"]))
 
-    if scen_cmp:
-        st.markdown(f"#### What {spec.name} changes vs the base outlook")
-        cc = st.columns(4)
-        cc[0].metric("Δ expected FY revenue", fmt_money(scen_cmp["d_fy_revenue"]))
-        cc[1].metric("Δ P(FY plan)", fmt_pts(scen_cmp["d_p_fy_plan"]))
-        cc[2].metric("Δ FY gross margin", fmt_pts(scen_cmp["d_fy_gm"]))
-        cc[3].metric("Δ ending inventory", fmt_money(scen_cmp["d_inventory"]),
+    if ctx_cmp:
+        st.markdown(f"#### What {context_label} changes vs the base outlook")
+        cc = st.columns(5 if package_specs else 4)
+        cc[0].metric("Δ expected FY revenue", fmt_money(ctx_cmp["d_fy_revenue"]))
+        cc[1].metric("Δ P(FY plan)", fmt_pts(ctx_cmp["d_p_fy_plan"]))
+        cc[2].metric("Δ FY gross margin", fmt_pts(ctx_cmp["d_fy_gm"]))
+        cc[3].metric("Δ ending inventory", fmt_money(ctx_cmp["d_inventory"]),
                      delta_color="off")
+        if package_specs:
+            cc[4].metric("Incremental EV (net of cost)",
+                         fmt_money(ctx_cmp["incremental_ev"]),
+                         f"cost {fmt_money(package_cost)}", delta_color="off")
+        st.plotly_chart(viz.context_bridge(
+            base_kpi, world_kpi, ctx_kpi, spec.name,
+            package_label if package_specs else None), width='stretch')
+        if len(package_specs) >= 2 and spec.name == "Base Case" \
+                and all(n in action_results for n in package_names):
+            additive = sum(
+                action_results[n][0]["fy_gross_profit"]["mean"]
+                - base_kpi["fy_gross_profit"]["mean"]
+                - ACTIONS_CATALOG[n].action_cost_usd for n in package_names)
+            st.caption(md(
+                f"Interaction check: the package's incremental EV is "
+                f"{fmt_money(ctx_cmp['incremental_ev'])}, vs "
+                f"{fmt_money(additive)} if the actions were simply additive. "
+                f"The gap is overlap — actions relieving the same constraint "
+                f"don't stack. (Individual EVs approximated at up to 2,000 "
+                f"paths.)"))
 
     st.markdown("### Executive summary")
     st.markdown(md(overview_summary))
 
     col_l, col_r = st.columns(2)
     with col_l:
-        st.markdown(f"#### Top risks{scen_suffix}")
-        for r in scen_risks[:3]:
+        st.markdown(f"#### Top risks{ctx_suffix}")
+        for r in ctx_risks[:3]:
             st.warning(md(f"{r['risk']}  \n*Trigger: {r['threshold']}*"))
     with col_r:
         st.markdown("#### Top recommended actions")
-        if scen_result is not base_result:
-            st.caption("Valued against the standing base-case outlook — open "
-                       "Management Recommendations to price these under the "
-                       "selected scenario.")
-        if recs:
-            for r in recs[:3]:
+        if ctx_result is not base_result:
+            st.caption("Valued against the standing base-case outlook, "
+                       "excluding actions already in your package — open "
+                       "Management Recommendations to price actions under "
+                       "the selected scenario.")
+        top_recs = [r for r in recs if r.title not in package_names]
+        if top_recs:
+            for r in top_recs[:3]:
                 st.info(md(
                     f"**{r.title}** — EV {fmt_money(r.expected_value_usd)}, "
                     f"P(plan) {fmt_pts(r.prob_plan_improvement)}, cost "
@@ -401,19 +482,19 @@ with tabs[0]:
     g1, g2 = st.columns(2)
     with g1:
         st.plotly_chart(viz.distribution_with_target(
-            quarterly(scen_result.revenue)[:, 0], k["q1_plan"],
-            f"Q1 revenue distribution vs plan{scen_suffix}", "Q1 revenue ($)"),
+            quarterly(ctx_result.revenue)[:, 0], k["q1_plan"],
+            f"Q1 revenue distribution vs plan{ctx_suffix}", "Q1 revenue ($)"),
             width='stretch')
     with g2:
-        fy_rev = scen_result.revenue[:, :12].sum(axis=1)
+        fy_rev = ctx_result.revenue[:, :12].sum(axis=1)
         fy_gm = np.where(fy_rev > 0,
-                         scen_result.gross_profit[:, :12].sum(axis=1) / fy_rev, 0)
+                         ctx_result.gross_profit[:, :12].sum(axis=1) / fy_rev, 0)
         st.plotly_chart(viz.distribution_with_target(
             fy_gm, CONFIG.financial.gross_margin_target,
-            f"FY gross-margin distribution vs target{scen_suffix}", "Gross margin",
+            f"FY gross-margin distribution vs target{ctx_suffix}", "Gross margin",
             value_fmt="pct", target_label="Target"), width='stretch')
-    st.plotly_chart(viz.quarterly_fan_chart(scen_result, baseline.revenue_plan_q,
-                                            scen_suffix),
+    st.plotly_chart(viz.quarterly_fan_chart(ctx_result, baseline.revenue_plan_q,
+                                            ctx_suffix),
                     width='stretch')
 
 # ---------------------------- 2. Demand & Backlog --------------------------
@@ -589,17 +670,18 @@ with tabs[2]:
 
 # ---------------------------- 3. Supply & Components -----------------------
 with tabs[3]:
-    if scen_result is not base_result:
-        st.caption(f"Showing supply risk under **{spec.name}**. Select Base Case "
-                   "in the sidebar for the standing risk picture.")
-    st.plotly_chart(viz.component_risk_heatmap(data.components, scen_binding),
+    if ctx_result is not base_result:
+        st.caption(f"Showing supply risk under **{context_label}**. Select "
+                   "Base Case (and clear the package) for the standing risk "
+                   "picture.")
+    st.plotly_chart(viz.component_risk_heatmap(data.components, ctx_binding),
                     width='stretch')
     c1, c2 = st.columns(2)
     with c1:
-        st.markdown(f"#### Most frequently binding components{scen_suffix}")
-        merged_bind = scen_binding.rename(
-            columns={"binding_frequency": "binding (scenario)"})
-        if scen_result is not base_result:
+        st.markdown(f"#### Most frequently binding components{ctx_suffix}")
+        merged_bind = ctx_binding.rename(
+            columns={"binding_frequency": "binding (conditioned)"})
+        if ctx_result is not base_result:
             merged_bind = merged_bind.merge(
                 binding.rename(columns={"binding_frequency": "binding (base)"}),
                 on="component", how="left")
@@ -608,7 +690,7 @@ with tabs[3]:
             width='stretch')
     with c2:
         st.markdown("#### Site disruption frequency (simulated)")
-        st.dataframe(site_disruption_frequency(scen_result)
+        st.dataframe(site_disruption_frequency(ctx_result)
                      .style.format({"disruption_frequency": "{:.1%}"}),
                      width='stretch')
     st.markdown("#### Component master")
@@ -616,7 +698,7 @@ with tabs[3]:
 
 # ---------------------------- 4. EMS & Integration -------------------------
 with tabs[4]:
-    st.plotly_chart(viz.utilization_heatmap(scen_result), width='stretch')
+    st.plotly_chart(viz.utilization_heatmap(ctx_result), width='stretch')
     st.plotly_chart(viz.site_utilization_heatmap(baseline), width='stretch')
     st.plotly_chart(viz.ems_capacity_vs_demand(baseline), width='stretch')
     st.markdown("#### Baseline constraint log")
@@ -626,11 +708,11 @@ with tabs[4]:
 with tabs[5]:
     from src.simulation import fiscal_year
     fy_map = {
-        "FY revenue": scen_result.revenue[:, :12].sum(axis=1),
-        "FY gross profit": scen_result.gross_profit[:, :12].sum(axis=1),
-        "FY operating income": scen_result.operating_income[:, :12].sum(axis=1),
-        "FY EBITDA proxy": scen_result.ebitda[:, :12].sum(axis=1),
-        "FY cash-flow proxy": scen_result.cash_flow[:, :12].sum(axis=1),
+        "FY revenue": ctx_result.revenue[:, :12].sum(axis=1),
+        "FY gross profit": ctx_result.gross_profit[:, :12].sum(axis=1),
+        "FY operating income": ctx_result.operating_income[:, :12].sum(axis=1),
+        "FY EBITDA proxy": ctx_result.ebitda[:, :12].sum(axis=1),
+        "FY cash-flow proxy": ctx_result.cash_flow[:, :12].sum(axis=1),
     }
     pick = st.selectbox("Distribution", list(fy_map))
     ref = baseline.revenue_plan_q[:4].sum() if pick == "FY revenue" else \
@@ -640,7 +722,7 @@ with tabs[5]:
         target_label="Plan" if pick == "FY revenue" else "Median"),
         width='stretch')
     st.plotly_chart(viz.inventory_trajectory(
-        scen_result, CONFIG.financial.inventory_target_usd),
+        ctx_result, CONFIG.financial.inventory_target_usd),
         width='stretch')
     st.markdown("#### Distribution statistics (scenario)")
     stats_rows = []
@@ -655,27 +737,28 @@ with tabs[5]:
 
 # ---------------------------- 6. Risk Drivers ------------------------------
 with tabs[6]:
-    if scen_result is not base_result:
-        st.caption(f"Showing risk drivers under **{spec.name}**. Select Base "
-                   "Case in the sidebar for the standing risk picture.")
-    outcome = st.selectbox("Outcome to explain", list(scen_rankings))
-    st.plotly_chart(viz.tornado_chart(scen_rankings[outcome],
-                                      outcome + scen_suffix),
+    if ctx_result is not base_result:
+        st.caption(f"Showing risk drivers under **{context_label}**. Select "
+                   "Base Case (and clear the package) for the standing risk "
+                   "picture.")
+    outcome = st.selectbox("Outcome to explain", list(ctx_rankings))
+    st.plotly_chart(viz.tornado_chart(ctx_rankings[outcome],
+                                      outcome + ctx_suffix),
                     width='stretch')
     c1, c2 = st.columns(2)
     with c1:
-        st.plotly_chart(viz.family_risk_chart(scen_fam_risk), width='stretch')
+        st.plotly_chart(viz.family_risk_chart(ctx_fam_risk), width='stretch')
     with c2:
-        st.plotly_chart(viz.risk_matrix(scen_fam_risk, scen_kpi), width='stretch')
+        st.plotly_chart(viz.risk_matrix(ctx_fam_risk, ctx_kpi), width='stretch')
     c3, c4 = st.columns(2)
     with c3:
-        st.markdown(f"#### Months with greatest capacity risk{scen_suffix}")
-        st.dataframe(scen_cap_risk.head(6).style.format(
+        st.markdown(f"#### Months with greatest capacity risk{ctx_suffix}")
+        st.dataframe(ctx_cap_risk.head(6).style.format(
             {"p_capacity_shortfall": "{:.0%}", "expected_units_short": "{:.1f}"}),
             width='stretch')
     with c4:
         st.markdown("#### Drivers of revenue shifting Q1 → Q2")
-        st.dataframe(quarter_shift_drivers(scen_result).head(6)
+        st.dataframe(quarter_shift_drivers(ctx_result).head(6)
                      .style.format({"spearman_rho": "{:+.2f}"}),
                      width='stretch')
     st.caption("Method: Spearman rank correlation between sampled inputs and "
@@ -709,11 +792,11 @@ with tabs[7]:
             "action_cost": lambda v: fmt_money(v),
             "incremental_ev": lambda v: fmt_money(v),
             "risk_reduced_per_dollar": "{:.1f}"}), width='stretch')
-    if scen_cmp:
-        st.plotly_chart(viz.revenue_bridge(base_kpi, scen_kpi),
+    if world_result is not base_result:
+        st.plotly_chart(viz.revenue_bridge(base_kpi, world_kpi),
                         width='stretch')
-    st.plotly_chart(viz.backlog_trajectory_chart(base_result, scen_result,
-                                                 spec.name),
+    st.plotly_chart(viz.backlog_trajectory_chart(base_result, ctx_result,
+                                                 context_label),
                     width='stretch')
     st.caption("Past-due backlog = cumulative demand minus cumulative shipments "
                "across simulated futures (expected value; band = scenario "
@@ -725,23 +808,24 @@ with tabs[8]:
     st.markdown("#### Modeled management actions")
     if spec.name != "Base Case":
         eval_choice = st.radio(
-            "Evaluate every action against:",
+            "Evaluation world (which world each action is priced in):",
             [f"Base Case — the standing outlook",
-             f"{spec.name} — value if this scenario occurs"],
+             f"{spec.name} — value if this world occurs"],
             horizontal=True)
         conditioned = eval_choice.startswith(spec.name)
     else:
         conditioned = False
-        st.caption("Actions are evaluated against the standing base-case "
+        st.caption("Actions are priced in the base world — the standing "
                    "outlook. Select a scenario in the sidebar to also price "
                    "them as contingent responses (\"what is this action worth "
-                   "if the scenario occurs?\").")
+                   "if that world occurs?\"). Actions already in your response "
+                   "package are marked in the table.")
 
     if conditioned:
         page_actions = cached_actions(data_seed, sim_seed, min(n_sims, 2000),
                                       dc.level, _params_key(spec.overrides),
                                       data, baseline, spec.overrides)
-        ref_kpi = scen_kpi
+        ref_kpi = world_kpi
         st.info(f"**Conditioned view:** every number below answers "
                 f"*\"if {spec.name} occurs, what does this action buy us?\"* "
                 f"Each action is simulated on top of the scenario and compared "
@@ -761,6 +845,7 @@ with tabs[8]:
         cmpv = compare_scenarios(ref_kpi, kpi, aspec.action_cost_usd)
         act_rows.append({
             "Action": name, "Horizon": aspec.horizon,
+            "In package": "✓" if name in package_names else "",
             "Δ FY revenue": cmpv["d_fy_revenue"],
             "Δ gross profit": cmpv["d_gross_profit"],
             "Δ P(Q1 plan)": cmpv["d_p_q1_plan"],
@@ -793,7 +878,9 @@ with tabs[8]:
     st.markdown("#### Ranked recommendations"
                 + (f" — if {spec.name} occurs" if conditioned else ""))
     if conditioned:
-        page_recs = build_recommendations(ref_kpi, page_actions, scen_binding,
+        world_binding = (binding if world_result is base_result else
+                         binding_components(world_result))
+        page_recs = build_recommendations(ref_kpi, page_actions, world_binding,
                                           demand_confidence=dc)
         st.caption("Ranked for the conditioned world. The Executive Overview's "
                    "top actions remain anchored to the base case.")
@@ -872,8 +959,67 @@ with tabs[9]:
     st.markdown("#### Demand plan (raw)")
     st.dataframe(data.demand, width='stretch', height=300)
 
-# ---------------------------- 10. Export & Methodology ---------------------
+# ------------------------ 10. Guide, Methodology & Export ------------------
 with tabs[10]:
+    st.markdown("#### How this engine works — the SIOP process guide")
+    st.markdown(
+        """
+**What SIOP is.** Sales, Inventory & Operations Planning is a monthly decision
+cadence. The executive meeting exists to answer four questions, in order:
+*How much should we trust the plan? What could happen to it? What should we
+do about it?* — and then sign the result and record it. Every page in this
+app supports one of those questions.
+
+**The one idea behind every number.** Each simulated outcome distribution is
+
+> **outcome = Simulate(inputs, world, response)** — judged against a frozen
+> plan of record.
+
+- The **world** is what happens *to* Apex: the base assumptions (calibrated
+  by the Demand Confidence assessment on the Market Intelligence tab) plus an
+  optional **scenario** deviation — demand and/or supply, no cost attached.
+- The **response** is what Apex chooses to *do*: a package of management
+  actions from the claim-sheet catalog, each with a decision cost and a
+  realistic effective-date latency.
+
+The sidebar sets this **evaluation context** — scenario and response package
+together. Bullish or bearish postures are scenarios too: they are beliefs
+about the world, not decisions, and a response package should look sensible
+under the base case, not only under the posture that flatters it.
+
+**Two kinds of view.** Every chart and table is either **plan-of-record**
+(a frozen anchor that never moves with the context — the plan, targets, the
+deterministic baseline, the Demand & Backlog page) or an **outcome view**
+(follows the evaluation context and says so in its title). If a title carries
+the context suffix, it is conditioned.
+
+**Three fixed reference frames.** (1) *vs plan* — the commitment: do we still
+make the number? Tile deltas on the Executive Overview. (2) *vs the base
+outlook* — what this context changes against the standing risk-adjusted
+outlook with no scenario and no actions. The strip under the tiles. (3) *the
+decomposition* — the bridge chart splits the total move into what the world
+does to us and what our response recovers, in that world, on identical
+simulated futures.
+
+**How the tabs follow the process.**
+
+| SIOP stage | Tabs |
+| --- | --- |
+| Executive answer | Executive Overview |
+| Demand review | Demand & Backlog · Market Intelligence & Demand Confidence |
+| Supply review | Supply & Component Risk · Manufacturing Capacity |
+| Integrated reconciliation | Financial Outcomes · Risk Drivers |
+| Decision support | Scenario Comparison · Management Recommendations |
+| Governance & reference | Assumptions & Data · this tab (guide, methodology, export) |
+
+**The cycle.** Market intelligence refreshes monthly (a curated feed reviewed
+before merge). Within a cycle, analysts maintain the action claim sheets and
+scenario set; the meeting evaluates contexts and picks a response package;
+the Excel export below is the signed readout. The approved package becomes
+next cycle's plan of record — that closing step is manual today and is the
+engine's planned next capability.
+        """)
+    st.divider()
     st.markdown("#### Excel export")
     scenario_rows_all = []
     for name in ["AI Demand Surge", "Critical FPGA Shortage",
@@ -885,7 +1031,8 @@ with tabs[10]:
             compare_scenarios(base_kpi, kpi_summary(r, baseline, CONFIG),
                               s.action_cost_usd))
     xl_bytes = build_excel_export(
-        base_kpi, baseline, base_result, summary_text + "\n\n" + provider.appendix(ctx),
+        base_kpi, baseline, base_result,
+        summary_text + "\n\n" + provider.appendix(report_ctx),
         scenario_rows_all, fam_risk, binding, rankings, recs,
         data.components, data.demand)
     st.download_button("Download Excel workbook (.xlsx)", xl_bytes,

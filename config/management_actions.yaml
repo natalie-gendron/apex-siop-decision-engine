@@ -100,6 +100,16 @@ actions:
       comp_supply_ramp:
         "__all__": [1, 1.05]
 
+  - name: Inventory reduction initiative
+    description: Constrain purchasing 6% and cut safety stocks 40% to release
+      working capital; accepts higher stockout exposure if demand firms.
+    horizon: Tactical
+    action_cost_usd: 0.0
+    overrides:
+      comp_supply_mult:
+        "__all__": 0.94
+      safety_stock_mult: 0.6
+
   # ---- Long-lead horizon (6-18 months; decisions only SIOP can make) ----
   - name: Dual-source the high-end FPGA
     description: Qualify an alternate FPGA source; +30% receipts after a

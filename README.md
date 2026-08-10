@@ -40,7 +40,7 @@ comparison  →  sensitivity ranking  →  recommendations  →  executive summa
 | `src/baseline_plan.py` | Deterministic monthly plan via a documented greedy heuristic |
 | `src/correlations.py` | Common-factor model (8 factors, AR(1) paths); PSD by construction |
 | `src/simulation.py` | Vectorized correlated Monte Carlo + full financial translation |
-| `src/scenarios.py` | 12 prebuilt scenarios, custom scenario, 12 management actions across SIOP horizons, KPI summary & comparison |
+| `src/scenarios.py` | 8 prebuilt scenarios (exogenous world-states), custom scenario, 14 management actions across SIOP horizons (combinable into response packages), KPI summary & comparison — see `docs/ARCHITECTURE.md` for the (world, response) evaluation-context model |
 | `src/market_intelligence.py` | Demand Confidence engine: market signals, external intelligence, customer confidence, and the confidence→simulation mapping |
 | `src/sensitivity.py` | Spearman rank-correlation driver rankings, binding constraints, revenue-at-risk views |
 | `src/recommendations.py` | Threshold-triggered, simulation-backed, scored recommendations |

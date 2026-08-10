@@ -15,10 +15,13 @@ from src.simulation import fiscal_year, run_simulation
 N = 400  # small but sufficient for smoke-running every scenario
 
 
-def test_twelve_prebuilt_scenarios_exist():
+def test_prebuilt_scenarios_are_exogenous_worlds():
+    """Scenarios are world-states: no decision costs (responses live in the
+    management-action catalog)."""
     scens = prebuilt_scenarios()
-    assert len(scens) == 12
+    assert len(scens) == 8
     assert "Base Case" in scens
+    assert all(s.action_cost_usd == 0.0 for s in scens.values())
 
 
 @pytest.mark.parametrize("name", list(prebuilt_scenarios()))
@@ -70,6 +73,29 @@ def test_management_actions_run(data, config, baseline):
     r = run_simulation(data, config, baseline, params=spec.overrides,
                        n_sims=N, seed=7, scenario_name=name)
     assert np.isfinite(r.revenue).all()
+
+
+def test_response_package_stacks_actions(data, config, baseline):
+    """A response package = merged action overrides + summed decision cost;
+    the simulator charges the cost to Q1 operating income and nothing else."""
+    from src.market_intelligence import merge_confidence_params
+
+    acts = management_actions()
+    names = ["Expedite critical component receipts",
+             "Authorize overtime at EMS sites"]
+    merged: dict = {}
+    for n in names:
+        merged = merge_confidence_params(merged, acts[n].overrides)
+    cost = sum(acts[n].action_cost_usd for n in names) + 6.0e6
+    with_cost = dict(merged, action_cost_usd=cost)
+    a = run_simulation(data, config, baseline, params=merged, n_sims=N, seed=7)
+    b = run_simulation(data, config, baseline, params=with_cost, n_sims=N,
+                       seed=7)
+    assert np.isfinite(b.revenue).all()
+    np.testing.assert_array_equal(a.revenue, b.revenue)   # cost is P&L-only
+    d_oi = (fiscal_year(a.operating_income).mean()
+            - fiscal_year(b.operating_income).mean())
+    assert d_oi == pytest.approx(cost, rel=1e-6)
 
 
 def test_targeted_expedite_recovery(data, config, baseline):

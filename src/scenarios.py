@@ -13,7 +13,13 @@ from .utils import percentile_stats
 
 
 def prebuilt_scenarios() -> dict[str, ScenarioSpec]:
-    """The twelve prebuilt SIOP scenarios."""
+    """The prebuilt SIOP scenarios — exogenous world-states only.
+
+    A scenario is something that happens TO the business (demand and/or
+    supply environment); it carries no decision cost. Things the business
+    chooses to DO live in config/management_actions.yaml as costed,
+    latency-ramped management actions and combine into response packages.
+    Both share the ScenarioSpec override-bundle primitive."""
     memory_recovery = np.concatenate([np.linspace(1.0, 1.3, 12), np.full(6, 1.3)])
     memory_delay = np.concatenate([np.full(9, 0.80), np.linspace(0.82, 1.0, 9)])
     scenarios = [
@@ -53,30 +59,6 @@ def prebuilt_scenarios() -> dict[str, ScenarioSpec]:
             "degraded schedule adherence.",
             {"ems_window_mult": {"EMS Malaysia": (1, 4, 0.55)},
              "adherence_delta": -0.02}),
-        ScenarioSpec(
-            "EMS Capacity Reservation",
-            "Apex pays to reserve 7 standard-equivalent units of monthly capacity "
-            "at EMS Taiwan and EMS Americas.",
-            {"ems_capacity_add": {"EMS Taiwan": 4.0, "EMS Americas": 3.0}},
-            action_cost_usd=4.5e6),
-        ScenarioSpec(
-            "Overtime & Expedite Response",
-            "Overtime is authorized at all EMS sites and component expediting is "
-            "run aggressively at premium cost.",
-            {"overtime_fraction": 0.8, "expedite_recovery": 0.8,
-             "expedite_premium_mult": 1.2},
-            action_cost_usd=8.0e6),
-        ScenarioSpec(
-            "Dual-Source Qualification",
-            "An alternate high-end FPGA source is qualified; +30% receipts become "
-            "available after a six-month qualification lag.",
-            {"comp_supply_ramp": {"High-End FPGA": (6, 1.3)}},
-            action_cost_usd=2.5e6),
-        ScenarioSpec(
-            "Inventory Reduction Initiative",
-            "Purchasing is constrained 6% and safety stocks cut 40% to release "
-            "working capital.",
-            {"comp_supply_mult": {"__all__": 0.94}, "safety_stock_mult": 0.6}),
         ScenarioSpec(
             "Customer Site-Readiness Delay",
             "Completed systems wait longer for installation and acceptance; slip "

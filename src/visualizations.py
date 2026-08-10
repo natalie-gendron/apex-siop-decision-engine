@@ -150,6 +150,45 @@ def revenue_bridge(base_kpi: dict, scen_kpi: dict) -> go.Figure:
                    legend=False)
 
 
+def context_bridge(base_kpi: dict, world_kpi: dict, final_kpi: dict,
+                   world_name: str, package_label: "str | None") -> go.Figure:
+    """Waterfall decomposing the evaluation context vs the base outlook:
+    base → what the world (scenario) does → what the response package
+    recovers → conditioned outlook. Either middle stage may be absent."""
+    base_rev = base_kpi["fy_revenue"]["mean"]
+    x = ["Base outlook"]
+    measure = ["absolute"]
+    y = [base_rev / 1e6]
+    text = [fmt_money(base_rev)]
+    prev = base_rev
+    if world_name != "Base Case":
+        d = world_kpi["fy_revenue"]["mean"] - prev
+        x.append(world_name)
+        measure.append("relative")
+        y.append(d / 1e6)
+        text.append(fmt_money(d))
+        prev += d
+    if package_label:
+        d = final_kpi["fy_revenue"]["mean"] - prev
+        x.append(package_label)
+        measure.append("relative")
+        y.append(d / 1e6)
+        text.append(fmt_money(d))
+    x.append("Conditioned outlook")
+    measure.append("total")
+    y.append(None)
+    text.append(fmt_money(final_kpi["fy_revenue"]["mean"]))
+    fig = go.Figure(go.Waterfall(
+        x=x, measure=measure, y=y, text=text, textposition="outside",
+        connector=dict(line=dict(color=BASELINE_C)),
+        increasing=dict(marker=dict(color=SERIES[2])),
+        decreasing=dict(marker=dict(color=STATUS["critical"])),
+        totals=dict(marker=dict(color=SERIES[0])),
+    ))
+    return _layout(fig, "Expected FY revenue — world vs response decomposition",
+                   "", "Revenue ($M)", legend=False)
+
+
 def scenario_comparison_chart(rows: list[dict]) -> go.Figure:
     """Grouped deltas vs base for selected scenarios."""
     names = [r["scenario"] for r in rows]

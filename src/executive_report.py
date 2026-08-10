@@ -203,15 +203,14 @@ class RulesBasedNarrative(NarrativeProvider):
         c = ctx.scenario_compare
         k = ctx.scenario_kpi
         assert c is not None and k is not None
-        bits = [f"**Scenario: {k['scenario']}.**"]
+        bits = [f"**Versus the base outlook — {k['scenario']}.**"]
         if abs(c["d_fy_revenue"]) >= MATERIAL_REVENUE_USD:
             bits.append(
-                f"Versus the base case, expected full-year revenue moves "
+                f"Expected full-year revenue moves "
                 f"{fmt_money(c['d_fy_revenue'])} and plan-attainment probability "
                 f"{fmt_pts(c['d_p_fy_plan'])}.")
         else:
-            bits.append("Versus the base case, expected full-year revenue is broadly "
-                        "unchanged.")
+            bits.append("Expected full-year revenue is broadly unchanged.")
         if abs(c["d_fy_gm"]) >= MATERIAL_GM_PTS:
             bits.append(f"Gross margin shifts {fmt_pts(c['d_fy_gm'])}.")
         if abs(c["d_inventory"]) >= MATERIAL_REVENUE_USD:

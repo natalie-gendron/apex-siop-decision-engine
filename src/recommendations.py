@@ -129,6 +129,11 @@ ACTION_RISK_MAP: dict[str, tuple[list[str], str]] = {
         ["margin", "inventory"],
         "Protects margin and cash at the cost of service level and revenue "
         "timing; customer-relationship impact is not modeled."),
+    "Inventory reduction initiative": (
+        ["inventory"],
+        "Releases working capital by accepting stockout exposure; revenue and "
+        "service downside grows if demand firms or supply tightens after "
+        "stocks are cut."),
     "Commit long-lead component orders": (
         ["component", "revenue"],
         "Non-cancellable commitments become E&O and cash exposure if demand "
