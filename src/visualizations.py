@@ -494,8 +494,8 @@ def confidence_sensitivity_chart(df, current_level: str) -> go.Figure:
             x=cur["level"], y=cur["mean"] / 1e6, mode="markers",
             marker=dict(symbol="diamond", size=16, color=SERIES[1],
                         line=dict(color=SURFACE, width=2)),
-            name="Current assessment",
-            hovertemplate="Current level: %{x}<extra></extra>"))
+            name="Applied level",
+            hovertemplate="Applied level: %{x}<extra></extra>"))
     return _layout(fig, "FY revenue uncertainty by Demand Confidence level",
                    "Demand Confidence", "FY revenue ($M)", height=400)
 

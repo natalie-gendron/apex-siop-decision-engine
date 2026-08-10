@@ -54,6 +54,32 @@ CONFIDENCE_BUSINESS_MEANING: dict[str, str] = {
 }
 
 
+def confidence_mapping_table(current_level: str | None = None,
+                             plain_language: bool = True) -> pd.DataFrame:
+    """The confidence -> simulation-knob mapping as a display table.
+
+    Numeric columns are read straight from CONFIDENCE_SIM_PARAMS so the
+    table shown to executives can never drift from what the simulation
+    applies. Moderate is labeled as the no-adjustment row (all knobs
+    neutral: the base rates estimated from history, unadjusted)."""
+    rows = []
+    for lvl in CONFIDENCE_LEVELS:
+        p = CONFIDENCE_SIM_PARAMS[lvl]
+        name = lvl + (" — no adjustment" if lvl == "Moderate" else "")
+        if lvl == current_level:
+            name = "→ " + name
+        row = {
+            "Confidence level": name,
+            "Demand volatility": f"×{p['demand_sigma_mult']:.2f}",
+            "Push-out probability": f"{p['pushout_prob_add'] * 100:+.0f} pts",
+            "Cancellations": f"×{p['cancel_prob_mult']:.2f}",
+        }
+        if plain_language:
+            row["What that means"] = CONFIDENCE_BUSINESS_MEANING[lvl]
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
 @dataclass
 class MarketSignal:
     name: str

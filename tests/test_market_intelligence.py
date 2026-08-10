@@ -8,6 +8,7 @@ from src.market_intelligence import (
     CONFIDENCE_SIM_PARAMS,
     assumptions_in_business_language,
     build_demand_confidence,
+    confidence_mapping_table,
     merge_confidence_params,
 )
 from src.simulation import fiscal_year, run_simulation
@@ -109,3 +110,23 @@ def test_confidence_levels_all_mapped():
     mults = [CONFIDENCE_SIM_PARAMS[lvl]["demand_sigma_mult"]
              for lvl in CONFIDENCE_LEVELS]
     assert mults == sorted(mults)  # monotonically wider as confidence falls
+
+
+def test_confidence_mapping_table_matches_sim_params():
+    df = confidence_mapping_table("Low")
+    assert len(df) == len(CONFIDENCE_LEVELS)
+    for _, row in df.iterrows():
+        lvl = (row["Confidence level"].removeprefix("→ ")
+               .split(" — ")[0])
+        p = CONFIDENCE_SIM_PARAMS[lvl]
+        assert row["Demand volatility"] == f"×{p['demand_sigma_mult']:.2f}"
+        assert row["Push-out probability"] == \
+            f"{p['pushout_prob_add'] * 100:+.0f} pts"
+        assert row["Cancellations"] == f"×{p['cancel_prob_mult']:.2f}"
+    marked = [r for r in df["Confidence level"] if r.startswith("→ ")]
+    assert marked == ["→ Low"]
+    assert any(r.endswith("— no adjustment") for r in df["Confidence level"])
+    assert "What that means" in df.columns
+    compact = confidence_mapping_table(None, plain_language=False)
+    assert "What that means" not in compact.columns
+    assert not any(r.startswith("→ ") for r in compact["Confidence level"])

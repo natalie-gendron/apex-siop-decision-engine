@@ -18,10 +18,10 @@ from src.data_generator import generate_all, load_or_generate
 from src.executive_report import ReportContext, get_provider
 from src.exports import build_excel_export
 from src.market_intelligence import (
-    CONFIDENCE_BUSINESS_MEANING,
     CONFIDENCE_LEVELS,
     assumptions_in_business_language,
     build_demand_confidence,
+    confidence_mapping_table,
     merge_confidence_params,
     parse_curated_external,
     CONFIDENCE_SIM_PARAMS,
@@ -161,6 +161,11 @@ scenario_name = st.sidebar.selectbox(
     help="Exogenous demand/supply assumptions — what could happen TO the "
          "business. Base Case = current SIOP assumptions.")
 
+# Demand Confidence override widget lives here (world axis: scenario, then
+# calibration), but its options depend on the assessed level, which needs the
+# input data — reserve the slot now, fill it after the assessment is built.
+confidence_slot = st.sidebar.container()
+
 # action catalog: the repo claim-sheet file, or a session-only what-if
 # upload from the Assumptions & Data page (demo of the analyst edit loop)
 _catalog_text = st.session_state.get("catalog_override_text")
@@ -281,7 +286,35 @@ except (ValueError, KeyError) as exc:
     st.warning(f"Curated external-intelligence file could not be used "
                f"({exc}); falling back to synthetic external intelligence.")
     dc = cached_confidence(data_seed, None, data)
-conf_params = dc.sim_params
+
+# Confidence is calibration, not hypothesis (see ARCHITECTURE.md): the
+# assessed level applies to every simulation by default; the sidebar override
+# allows what-ifs at other levels but is always labeled as an override.
+with confidence_slot:
+    conf_choice = st.selectbox(
+        "Demand confidence (trust in the plan)",
+        ["Assessed"] + CONFIDENCE_LEVELS,
+        format_func=lambda o: (f"Assessed — {dc.level}" if o == "Assessed"
+                               else o),
+        help="How much to trust the demand plan, applied to every simulation. "
+             "'Assessed' uses the level derived from market signals and "
+             "external intelligence (Market Intelligence tab); picking a "
+             "level instead is a what-if override. Confidence never rewrites "
+             "the demand plan — it calibrates demand volatility, push-out "
+             "and cancellation assumptions around it.")
+    with st.popover("What each level does", width="stretch"):
+        st.dataframe(confidence_mapping_table(
+            dc.level if conf_choice == "Assessed" else conf_choice,
+            plain_language=False), width='stretch', hide_index=True)
+        st.caption("→ marks the level being applied. Moderate = the base "
+                   "rates estimated from history, unadjusted.")
+effective_level = dc.level if conf_choice == "Assessed" else conf_choice
+confidence_overridden = effective_level != dc.level
+if confidence_overridden:
+    confidence_slot.caption(f"Override active — signals assess "
+                            f"**{dc.level}**; simulations run at "
+                            f"**{effective_level}**.")
+conf_params = dict(CONFIDENCE_SIM_PARAMS[effective_level])
 
 scenarios = prebuilt_scenarios()
 if scenario_name == "Custom Scenario":
@@ -328,7 +361,7 @@ else:
 
 progress.progress(0.7, text="Scoring management actions...")
 action_results = cached_actions(data_seed, sim_seed, min(n_sims, 2000),
-                                dc.level, "base", catalog_key,
+                                effective_level, "base", catalog_key,
                                 data, baseline, {}, ACTIONS_CATALOG)
 progress.progress(1.0, text="Done")
 progress.empty()
@@ -397,7 +430,9 @@ st.title("Apex Test Systems — SIOP Risk & Scenario Engine")
 st.caption(f"18-month horizon from 2026-07 · scenario: **{spec.name}** · "
            f"response package: "
            f"**{f'{len(package_specs)} actions' if package_specs else 'none'}** · "
-           f"demand confidence: **{dc.level}** · {n_sims:,} simulations · "
+           f"demand confidence: **{effective_level}"
+           f"{' — overridden' if confidence_overridden else ''}** · "
+           f"{n_sims:,} simulations · "
            f"data seed {data_seed} · sim seed {sim_seed} · all data synthetic")
 
 # Tab order deliberately follows the SIOP process: the executive answer
@@ -645,6 +680,11 @@ with tabs[2]:
               f"×{conf_params['demand_sigma_mult']:.2f}",
               "applied to demand volatility", delta_color="off")
     st.markdown(md(dc.narrative))
+    if confidence_overridden:
+        st.warning(f"Sidebar override active: simulations are running at "
+                   f"**{effective_level}**, not the assessed "
+                   f"**{dc.level}** shown above. Set the sidebar back to "
+                   f"'Assessed' to apply this page's assessment.")
     st.caption("This page answers: how much confidence should management have "
                "in the current demand plan? The assessment feeds the Monte "
                "Carlo simulation directly — see the mapping below.")
@@ -697,6 +737,11 @@ with tabs[2]:
             st.caption(e.summary)
             if e.sources:
                 st.caption("Sources: " + " · ".join(e.sources))
+    st.caption("Intelligence impacts adjust the confidence *score* (0–100), "
+               "not the simulation directly. They reach the Monte Carlo only "
+               "by tipping the score across a level threshold — at which "
+               "point all three simulation knobs change together (see the "
+               "mapping below). No single article moves an individual knob.")
     with st.expander("Update the intelligence feed (upload a new CSV)"):
         up = st.file_uploader("external_intel.csv", type="csv",
                               label_visibility="collapsed")
@@ -735,21 +780,34 @@ with tabs[2]:
     st.dataframe(assumptions_in_business_language(data, CONFIG, dc),
                  width='stretch', hide_index=True)
     st.markdown("**How Demand Confidence adjusts the simulation**")
-    mapping_df = pd.DataFrame([{
-        "Confidence level": ("→ " if lvl == dc.level else "") + lvl,
-        "What it does to the simulation": CONFIDENCE_BUSINESS_MEANING[lvl],
-    } for lvl in CONFIDENCE_LEVELS])
-    st.dataframe(mapping_df, width='stretch', hide_index=True)
-    st.caption(f"The current assessment ({dc.level}) is applied to the base "
-               "case, every scenario, and every management action — lower "
-               "confidence widens every probability distribution in this app.")
+    st.markdown(
+        "Confidence never rewrites the demand plan. It changes how tightly "
+        "the simulated world hugs the plan (demand volatility) and how "
+        "orders behave on the way (push-out and cancellation probabilities) "
+        "— three knobs, read straight from the table the simulation uses:")
+    st.dataframe(confidence_mapping_table(effective_level),
+                 width='stretch', hide_index=True)
+    if confidence_overridden:
+        st.caption(f"→ marks the sidebar override ({effective_level}), "
+                   f"currently applied to the base case, every scenario, and "
+                   f"every management action. The assessed level is "
+                   f"{dc.level}.")
+    else:
+        st.caption(f"→ marks the current assessment ({effective_level}), "
+                   "applied to the base case, every scenario, and every "
+                   "management action — lower confidence widens every "
+                   "probability distribution in this app. Volatility is pure "
+                   "spread (it widens or narrows outcomes around the same "
+                   "plan); push-outs move revenue later; cancellations "
+                   "remove it.")
 
     # -- Demand sensitivity ---------------------------------------------------
     st.markdown("#### Demand sensitivity — what confidence is worth")
     sens_rows = []
     for lvl in CONFIDENCE_LEVELS:
         lp = dict(CONFIDENCE_SIM_PARAMS[lvl])
-        r = cached_simulation(data_seed, sim_seed, 1500, f"Confidence: {lvl}",
+        r = cached_simulation(data_seed, sim_seed, n_sims,
+                              f"Confidence: {lvl}",
                               _params_key(lp), data, baseline, lp)
         fy_rev = r.revenue[:, :12].sum(axis=1)
         fy_gp = r.gross_profit[:, :12].sum(axis=1)
@@ -765,7 +823,7 @@ with tabs[2]:
             "Cash flow": r.cash_flow[:, :12].sum(axis=1).mean(),
         })
     sens_df = pd.DataFrame(sens_rows)
-    st.plotly_chart(viz.confidence_sensitivity_chart(sens_df, dc.level),
+    st.plotly_chart(viz.confidence_sensitivity_chart(sens_df, effective_level),
                     width='stretch')
     disp = sens_df.assign(**{
         "FY revenue (mean)": sens_df["mean"], "FY revenue (P5)": sens_df["p5"],
@@ -783,12 +841,17 @@ with tabs[2]:
         "Working capital": lambda v: fmt_money(v),
         "Cash flow": lambda v: fmt_money(v)}),
         width='stretch', hide_index=True)
-    st.caption("Each row re-runs the simulation with only the Demand Confidence "
-               "adjustment changed (1,500 paths, common random numbers). The "
-               "expected values move modestly, but the downside tail (P5) and "
-               "plan-attainment probability move sharply — demand confidence is "
-               "primarily a tail-risk driver, which is why it belongs in front "
-               "of executives.")
+    st.caption(f"Each row re-runs the simulation with only the Demand "
+               f"Confidence adjustment changed, at the same path count and "
+               f"seeds as the headline results ({n_sims:,} paths, common "
+               f"random numbers) — so the applied level's row reconciles "
+               f"exactly with the standing base outlook on the Executive "
+               f"Overview. The Moderate row is the unadjusted world (base "
+               f"rates from history, no intel adjustment). Expected values "
+               f"move modestly, but the downside tail (P5) and "
+               f"plan-attainment probability move sharply — demand "
+               f"confidence is primarily a tail-risk driver, which is why "
+               f"it belongs in front of executives.")
 
 # ---------------------------- 3. Supply & Components -----------------------
 with tabs[3]:
@@ -1198,7 +1261,8 @@ app supports one of those questions.
 > plan of record.
 
 - The **world** is what happens *to* Apex: the base assumptions (calibrated
-  by the Demand Confidence assessment on the Market Intelligence tab) plus an
+  by the Demand Confidence assessment on the Market Intelligence tab, or a
+  sidebar override of that level for what-ifs) plus an
   optional **scenario** deviation — demand and/or supply, no cost attached.
 - The **response** is what Apex chooses to *do*: a package of management
   actions from the claim-sheet catalog, each with a decision cost and a

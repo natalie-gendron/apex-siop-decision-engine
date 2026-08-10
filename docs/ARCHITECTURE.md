@@ -31,7 +31,8 @@ One equation describes everything the engine computes:
 - **World** — what happens *to* the business. Exogenous, carries no cost.
   Composed of the **base beliefs** (calibrated monthly by evidence: the
   Demand Confidence assessment, which widens or narrows demand variance,
-  push-out and cancellation assumptions in *every* simulation) plus an
+  push-out and cancellation assumptions in *every* simulation; the sidebar
+  can override the assessed level for what-ifs, default "Assessed") plus an
   optional **scenario** deviation (demand and/or supply: surges, shortages,
   disruptions, push-outs). Bullish/bearish management postures are scenarios
   too — beliefs about the world, not decisions.
@@ -171,6 +172,32 @@ Executive answer first, then the meeting's supporting flow:
   evaluation-world toggle was removed (2026-08-10) as a second source of
   truth; under a scenario the base-world EV stays visible as a comparison
   column instead. Both frames at once, never toggled.
+- **Demand Confidence is calibration, not hypothesis** (2026-08-10). A
+  scenario is a chosen hypothesis about how the world could differ; the
+  confidence assessment is *evidence* — an estimate of how uncertain today's
+  world already is, in the same category as the historical push-out and
+  cancellation rates it scales. It therefore applies to every simulation by
+  default and gets **no on/off toggle**: an off-switch for the uncertainty
+  estimate is the switch people reach for exactly when confidence is low.
+  The no-adjustment counterfactual stays visible instead — the Moderate row
+  of the sensitivity table *is* the unadjusted world, and is labeled so.
+  A sidebar **override** (default "Assessed") allows what-ifs at other
+  levels; it belongs to the world axis and is labeled as an override
+  everywhere it differs from the assessment (sidebar badge, header caption,
+  Market Intelligence banner). Confidence never rewrites the demand plan —
+  it reaches the simulation only through three knobs (`demand_sigma_mult`,
+  `pushout_prob_add`, `cancel_prob_mult`), and external-intel impacts act
+  one step further upstream: they move the 0-100 *score*, reaching the
+  knobs only when they tip the score across a level threshold, at which
+  point all three change together.
+- **No third simulation count.** Headline results run at the sidebar mode's
+  path count; action pricing runs at `min(n_sims, 2000)`; nothing else may
+  introduce its own count. The confidence sensitivity table runs at the
+  headline count with the same seeds (common random numbers), so the
+  applied level's row reconciles exactly with the standing base outlook —
+  a table that disagrees with the Overview for the same world reads as a
+  bug, not a nuance. (Its previous hardcoded 1,500 paths were retired
+  2026-08-10.)
 - **The sim mean sits below the deterministic baseline by design** (capacity
   caps demand upside asymmetrically) — the risk-adjusted outlook story, not
   a bug.
