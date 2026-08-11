@@ -168,7 +168,7 @@ their scoring weights (EV 35%, probability 30%, revenue 20%, cash −15%).
 
 ## Test results
 
-`pytest` — **68 passed** (data reproducibility & validity, baseline
+`pytest` — **69 passed** (data reproducibility & validity, baseline
 feasibility vs component/EMS/integration constraints, financial identities,
 simulation reproducibility & bounds, correlation PSD & co-movement, all 8
 scenarios run, comparison reconciliation, equal-path-count action pricing,
