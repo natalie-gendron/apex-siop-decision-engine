@@ -215,8 +215,10 @@ def kpi_summary(result: SimulationResult, baseline: BaselineResult,
     with np.errstate(divide="ignore", invalid="ignore"):
         turns = np.where(avg_inv > 0, fy_cogs / avg_inv, 0.0)
 
-    total_backlog = np.clip(fiscal_year(result.units_demanded)
-                            - fiscal_year(result.units_shipped), 0, None)
+    # past-due, not backlog: simulated demand not yet served (forecast
+    # included) — an outcome measure, not the order book
+    total_past_due = np.clip(fiscal_year(result.units_demanded)
+                             - fiscal_year(result.units_shipped), 0, None)
 
     return {
         "scenario": result.scenario_name,
@@ -259,7 +261,7 @@ def kpi_summary(result: SimulationResult, baseline: BaselineResult,
         "service_level": percentile_stats(sl),
         "p_missed_commitment": float((sl < 0.95).mean()),
         "p_stockout": float((result.component_short_units.sum(axis=1) > 1.0).mean()),
-        "expected_backlog_units": float(total_backlog.mean()),
+        "expected_past_due_units": float(total_past_due.mean()),
         "expedite_cost": percentile_stats(fiscal_year(result.expedite_cost)),
         "rework_cost": percentile_stats(fiscal_year(result.rework_cost)),
         "ems_utilization": float(result.ems_utilization[:, :12].mean()),

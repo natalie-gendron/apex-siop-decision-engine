@@ -143,7 +143,7 @@ class RulesBasedNarrative(NarrativeProvider):
                 f"clearing the target in {k['p_gm_target']:.0%} of simulations.")
         sentences.append(
             f"Timing remains a first-order uncertainty: expected past-due backlog is "
-            f"{k['expected_backlog_units']:.0f} systems for the year, and "
+            f"{k['expected_past_due_units']:.0f} systems for the year, and "
             f"{k['p_missed_commitment']:.0%} of simulations show the fill rate "
             f"falling below 95%.")
         return " ".join(sentences)
