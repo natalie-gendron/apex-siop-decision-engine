@@ -191,7 +191,7 @@
     <h2>2 — What each knob does to the fan</h2>
     <figure>
       <div class="fig-scroll">
-      <svg viewBox="0 0 880 260" role="img" aria-label="Three panels. Confidence widens or narrows the uncertainty band around an unchanged solid central-outlook line — the trajectory the demand plan implies — while the dashed plan-of-record line sits just below it, also unmoved. A scenario shifts the whole band away while the dashed plan line stays put as the yardstick. A response bends the band partly back toward the plan, at a cost.">
+      <svg viewBox="0 0 880 260" role="img" aria-label="Three panels drawn in outcome space; every solid line is an outlook named by its context. Confidence widens or narrows the uncertainty band around an unmoved base outlook, with the dashed plan-of-record line just below it, also unmoved. A scenario shifts the outlook away while the dashed plan line stays put as the yardstick. A response bends the outlook partly back toward the plan — the conditioned outlook — at a cost, with the unmitigated path shown as a dotted ghost.">
         <!-- Panel A: confidence. Solid line = central outlook (what the demand
              plan implies, pushed through supply); dashed = plan of record.
              Two distinct lines by design: the outlook sits above the plan
@@ -205,7 +205,7 @@
           <path class="plan-line" d="M10 170 L270 138"></path>
           <text class="t-small" x="240" y="66" text-anchor="end">wide = low confidence</text>
           <text class="t-small" x="235" y="99" text-anchor="end">narrow = high</text>
-          <text class="t-tag" x="262" y="114" text-anchor="end" style="fill: var(--belief)">outlook</text>
+          <text class="t-tag" x="262" y="114" text-anchor="end" style="fill: var(--belief)">base outlook</text>
           <text class="t-tag" x="262" y="152" text-anchor="end">plan</text>
           <line class="ghost" x1="10" y1="210" x2="270" y2="210"></line>
           <text class="t-small" x="10" y="232">only the band changes — outlook and plan stay put</text>
@@ -217,9 +217,9 @@
           <path class="center-w" d="M10 170 L270 165"></path>
           <path class="plan-line" d="M10 170 L270 120"></path>
           <text class="t-tag" x="262" y="112" text-anchor="end">plan</text>
-          <text class="t-small" x="262" y="185" text-anchor="end">scenario world</text>
+          <text class="t-tag" x="262" y="185" text-anchor="end" style="fill: var(--belief)">scenario outlook</text>
           <line class="ghost" x1="10" y1="210" x2="270" y2="210"></line>
-          <text class="t-small" x="10" y="232">the world shifts — the plan stays the yardstick</text>
+          <text class="t-small" x="10" y="232">the outlook shifts — the plan stays the yardstick</text>
         </g>
         <!-- Panel C: response -->
         <g transform="translate(600, 20)">
@@ -229,6 +229,7 @@
           <path class="center-r" d="M10 170 C 100 178, 180 162, 270 138"></path>
           <path class="plan-line" d="M10 170 L270 120"></path>
           <text class="t-tag" x="262" y="112" text-anchor="end">plan</text>
+          <text class="t-tag" x="262" y="130" text-anchor="end" style="fill: var(--decision)">conditioned outlook</text>
           <text class="t-small" x="262" y="182" text-anchor="end">unmitigated</text>
           <text class="t-tag" x="150" y="200" style="fill: var(--decision)">$ package cost</text>
           <line class="ghost" x1="10" y1="210" x2="270" y2="210"></line>
@@ -236,7 +237,7 @@
         </g>
       </svg>
       </div>
-      <figcaption><b>The distinction that matters most, drawn.</b> Every panel speaks the same grammar: the <b>solid line</b> is the central outlook — the trajectory the demand plan implies once pushed through supply — and the <b>dashed line</b> is the plan of record, sitting just below it. Confidence is trust in the <i>forecast</i>, but it acts only on the band: the demand plan is never rewritten and neither line moves. A scenario moves the outlook; the plan stays put because it is what everything is measured against. A response then claws back part of the gap, and unlike the other two knobs, it costs money.</figcaption>
+      <figcaption><b>The distinction that matters most, drawn.</b> These panels live in outcome space, and every <b>solid line is an outlook</b> — what a context is expected to produce — named by its context: the <b>base outlook</b>, the <b>scenario outlook</b> (unmitigated), the <b>conditioned outlook</b> (scenario + response). The <b>dashed line</b> is always the plan of record. The demand plan is deliberately not drawn here — it is an input, not an outcome, and lives in figure 1; every outlook is what it produces once pushed through supply. Confidence is trust in the <i>forecast</i>, but it acts only on the band: it rewrites nothing and moves no line. A scenario moves the outlook; the plan stays put because it is what everything is measured against. A response then claws back part of the gap, and unlike the other two knobs, it costs money.</figcaption>
     </figure>
   </section>
 
@@ -295,7 +296,7 @@
         </tr>
         <tr>
           <td><b>Outlook</b></td>
-          <td>The simulated outcome distribution for a context — what the demand plan, pushed through supply and calibrated by evidence, is expected to produce. The <b>standing base outlook</b> is the (base world, no response) cell. Drawn as the solid line (center) and band.</td>
+          <td>The simulated outcome distribution for a context — what the demand plan, pushed through supply and calibrated by evidence, is expected to produce. Always named by its context: the <b>base outlook</b> (base, no response), a <b>scenario outlook</b> (unmitigated world), the <b>conditioned outlook</b> (world + response). Drawn as the solid line (center) and band.</td>
           <td>The plan. The outlook moves with the context; the plan never does — P(plan) is the gap between them, measured.</td>
         </tr>
         <tr>
