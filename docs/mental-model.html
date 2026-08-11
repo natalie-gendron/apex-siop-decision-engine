@@ -63,6 +63,7 @@
   .eq b { font-weight: 600; }
   .eq .w { color: var(--belief); }
   .eq .r { color: var(--decision); }
+  .eq .eq-note { display: block; margin-top: 0.3rem; color: var(--muted); white-space: normal; }
   section h2 {
     font-size: 0.8rem; font-weight: 600; text-transform: uppercase;
     letter-spacing: 0.08em; color: var(--muted); margin: 0 0 0.75rem;
@@ -115,7 +116,7 @@
     <p>The mental model behind the Apex SIOP engine — what each sidebar knob touches, and what it can never touch.</p>
   </header>
 
-  <div class="eq">outcome distribution = Simulate(<b>inputs</b>, <b class="w">world</b>, <b class="r">response</b>) <span style="color: var(--muted)">— judged against the frozen plan of record</span></div>
+  <div class="eq">outcome distribution = Simulate(<b>inputs</b>, <b class="w">world</b>, <b class="r">response</b>)<span class="eq-note">— judged against the frozen plan of record</span></div>
 
   <section>
     <h2>1 — What feeds the simulation</h2>
@@ -233,7 +234,7 @@
           <path class="center-r" d="M10 170 C 100 178, 180 162, 270 138"></path>
           <path class="plan-line" d="M10 170 L270 120"></path>
           <text class="t-tag" x="262" y="112" text-anchor="end">plan</text>
-          <text class="t-tag" x="262" y="130" text-anchor="end" style="fill: var(--decision)">conditioned outlook</text>
+          <text class="t-tag" x="70" y="200" style="fill: var(--decision)">conditioned outlook</text>
           <text class="t-tag" x="262" y="182" text-anchor="end">scenario outlook</text>
           <line class="ghost" x1="10" y1="210" x2="270" y2="210"></line>
           <text class="t-small" x="10" y="232">buys back part of the gap — at a decision cost</text>
