@@ -1165,11 +1165,20 @@ with tabs[8]:
                    "top actions remain anchored to the base case.")
     else:
         page_recs = recs
+    # the ranked list deliberately includes actions already in the package
+    # (they reprice in-world); mark them so the list can't be read as
+    # recommending them twice. The "Why" quotes the world's UNMITIGATED
+    # risk figures — label that world explicitly when the page's tiles are
+    # showing the mitigated (scenario + package) outlook.
+    why_label = (f"**Why** *(in the unmitigated {spec.name} world, before "
+                 f"any response)*: " if conditioned else "**Why:** ")
     for i, r in enumerate(page_recs, 1):
-        with st.expander(f"{i}. {r.title} — EV {fmt_money(r.expected_value_usd)} "
+        pkg_mark = " — in package" if r.title in package_names else ""
+        with st.expander(f"{i}. {r.title}{pkg_mark} — EV "
+                         f"{fmt_money(r.expected_value_usd)} "
                          f"({r.confidence} confidence)"):
             st.markdown(md(
-                f"**Why:** {r.risk}.  \n"
+                f"{why_label}{r.risk}.  \n"
                 f"**Trigger:** {r.threshold}.  \n"
                 f"**Action:** {r.action}  \n\n"
                 f"**Modeled impact (fiscal-year window):** "
