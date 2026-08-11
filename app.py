@@ -464,7 +464,7 @@ with tabs[0]:
     with st.expander("How to read this page"):
         st.markdown(md(
             "Every view in this app is one of two kinds: **plan-of-record** "
-            "(frozen anchors — the plan, targets, the deterministic baseline) "
+            "(frozen anchors — the plan, targets, the baseline supply plan) "
             "or **outcome** (follows the evaluation context you set in the "
             "sidebar). The context has two parts: a **scenario** — the world, "
             "what could happen *to* Apex (exogenous, no cost) — and a "
@@ -1320,7 +1320,7 @@ sidebar override for what-ifs.
 
 **Two kinds of view.** Every chart and table is either **plan-of-record**
 (a frozen anchor that never moves with the context — the plan, targets, the
-deterministic baseline, the Demand & Backlog page) or an **outcome view**
+baseline supply plan, the Demand & Backlog page) or an **outcome view**
 (follows the evaluation context and says so in its title). If a title carries
 the context suffix, it is conditioned.
 

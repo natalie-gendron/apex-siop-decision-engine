@@ -68,7 +68,7 @@ grid:
 Every chart and table is exactly one of:
 
 - **Plan-of-record view** — a frozen anchor. Never moves with the context.
-  (The plan, financial targets, the deterministic baseline, Demand &
+  (The plan, financial targets, the baseline supply plan, Demand &
   Backlog.)
 - **Outcome view** — follows the evaluation context and *says so in its
   title* (context suffix) or in a banner.
@@ -124,12 +124,12 @@ sync.
 | Term | Means | Is not |
 | --- | --- | --- |
 | **Forecast** | The estimate of demand not yet booked — the uncertain, forward-looking slice of the demand plan. | Booked orders (standard S&OP: orders *consume* forecast; inside the demand time fence only orders count as demand). |
-| **Firm backlog** | Booked orders not yet shipped/recognized — actual demand. | A certainty: push-outs and cancellations still touch it. |
-| **Demand plan** | The unconstrained demand statement: forecast + firm backlog, customer × family × month, at requested dates. | A supply commitment; confidence never rewrites it. |
-| **Plan (of record)** | The frozen revenue commitment for the cycle, derived from the demand plan by the baseline allocation — the yardstick behind every "vs plan" delta and P(plan). Industry analogue: the AOP / "one set of numbers". | A forecast; it never moves inside a cycle, and it never means a response package. |
+| **Backlog** | Booked orders not yet shipped/recognized — actual demand ("firm" in the booking sense). | A certainty: push-outs and cancellations still touch it. Nor the **past-due backlog** — that is an outcome (simulated demand not yet served) and always carries the "past-due" qualifier. |
+| **Demand plan** | The unconstrained demand statement: forecast + backlog, customer × family × month, at requested dates. | A supply commitment; confidence never rewrites it. |
+| **Plan (of record)** | The frozen revenue commitment for the cycle, derived from the demand plan by the baseline supply plan — the yardstick behind every "vs plan" delta and P(plan). Industry mapping: the revenue line of the AOP ("one set of numbers"), and the internal number behind quarterly street guidance. | A forecast; it never moves inside a cycle, and it never means a response package. Nor guidance itself — guidance is the external, usually more conservative derivative; anchor on the internal commitment or P(plan) quietly becomes P(guidance). |
 | **Outlook** | The simulated outcome distribution for a context — what the demand plan, pushed through supply and calibrated by evidence, is expected to produce. Always named by its context: the **standing base outlook** (base, ∅), a **scenario outlook** (unmitigated), the **conditioned outlook** (world + response). In graphics: the solid center line and band; the demand plan is never drawn in outcome space. | The plan — the outlook moves with the context, the plan never does; P(plan) is the measured gap between them. Nor "the decided version": decidedness is a sign-off event, not a context — whichever cell the meeting commits (package or none) becomes the **decision of record**. |
-| **Deterministic baseline** | The feasible greedy allocation that turns the demand plan into the plan of record. | An outcome view. |
-| **Targets** | Annual financial goals (gross margin, inventory). | The plan. |
+| **Baseline supply plan** ("the baseline") | The feasible allocation of the demand plan across sites and months — respecting components, capacity and integration — whose revenue becomes the plan of record. "Deterministic" describes how it is computed (zero shocks), not what it is. | The base case: the base *outlook* is a simulation, the baseline is an allocation — frozen mechanics, reference only. |
+| **Targets** | Annual financial goals (gross margin, inventory) — the margin and inventory lines of the AOP. | The plan. Not a synonym for "AOP": the AOP's revenue line is the plan of record, so naming only these AOP would split the term. |
 | **Scenario** (world) | Exogenous hypothesis about what happens *to* the business. | A decision; carries no cost. |
 | **Demand Confidence** (world) | Assessed evidence calibrating demand variance, push-out and cancellation odds around the demand plan. The sidebar shorthand "trust in the forecast" names the least certain slice; the mechanics act on the whole demand plan. | A hypothesis or a toggle. |
 | **Response** (package) | Costed, latency-ramped actions — what the business chooses to *do*. | Part of any world; the only axis where money is spent. |
@@ -140,7 +140,7 @@ sync.
 | Layer | Contents | Code |
 | --- | --- | --- |
 | 0 · Data | 7 synthetic input tables, validation gate; V2 seam: synthetic/uploaded selector toward real ERP/CRM feeds | `data_generator`, `validation` |
-| 1 · Plan of record | Deterministic greedy baseline allocation; the frozen anchor | `baseline_plan` |
+| 1 · Plan of record | Baseline supply plan (deterministic greedy allocation); the frozen anchor | `baseline_plan` |
 | 2 · Evidence | Demand Confidence: 8 weighted signals + curated external intel → sim-parameter backdrop merged into every run | `market_intelligence` |
 | 3 · Evaluation context | (world, response); scenarios exogenous-only; actions/claim sheets; layering via `merge_confidence_params` | `scenarios`, `config/management_actions.yaml` |
 | 4 · Simulation | Correlated common-factor Monte Carlo; capacity rationing; financial translation | `correlations`, `simulation`, `operations` |

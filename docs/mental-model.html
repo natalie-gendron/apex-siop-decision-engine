@@ -121,7 +121,7 @@
     <h2>1 — What feeds the simulation</h2>
     <figure>
       <div class="fig-scroll">
-      <svg viewBox="0 0 880 390" role="img" aria-label="Three lanes feed the Simulate step: the world (scenario plus demand confidence, beliefs with no cost), the frozen inputs (the demand plan — forecast plus firm backlog — and supply assumptions, never rewritten), and the response (a costed package of actions). Simulate emits an outcome distribution that is read against a dashed marker for the frozen plan of record.">
+      <svg viewBox="0 0 880 390" role="img" aria-label="Three lanes feed the Simulate step: the world (scenario plus demand confidence, beliefs with no cost), the frozen inputs (the demand plan — forecast plus backlog — and supply assumptions, never rewritten), and the response (a costed package of actions). Simulate emits an outcome distribution that is read against a dashed marker for the frozen plan of record.">
         <defs>
           <marker id="arr-m" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
             <path d="M0 0 L10 5 L0 10 Z" style="fill: var(--muted)"></path>
@@ -148,7 +148,7 @@
         <!-- INPUTS -->
         <rect class="box-frozen" x="40" y="196" width="280" height="64" rx="6"></rect>
         <text class="t-title" x="56" y="218">INPUTS — FROZEN FOR THE CYCLE</text>
-        <text class="t-small" x="56" y="234">demand plan (forecast + firm backlog)</text>
+        <text class="t-small" x="56" y="234">demand plan (forecast + backlog)</text>
         <text class="t-small" x="56" y="249">+ supply assumptions</text>
         <text class="t-tag" x="304" y="249" text-anchor="end">locked</text>
 
@@ -281,19 +281,19 @@
           <td>Booked orders. In standard S&amp;OP practice orders <i>consume</i> the forecast; inside the demand time fence only orders count as demand.</td>
         </tr>
         <tr>
-          <td><b>Firm backlog</b></td>
-          <td>Booked orders not yet shipped or recognized — actual demand on the books.</td>
-          <td>A certainty. "Firm" describes the booking, not the timing: push-outs and cancellations still touch it.</td>
+          <td><b>Backlog</b></td>
+          <td>Booked orders not yet shipped or recognized — actual demand on the books ("firm" in the booking sense).</td>
+          <td>A certainty — push-outs and cancellations still touch it. Nor the <b>past-due backlog</b>, which is an outcome (simulated demand not yet served) and always carries the "past-due" qualifier.</td>
         </tr>
         <tr>
           <td><b>Demand plan</b></td>
-          <td>The unconstrained demand statement: forecast + firm backlog, customer × family × month, at requested dates.</td>
+          <td>The unconstrained demand statement: forecast + backlog, customer × family × month, at requested dates.</td>
           <td>A supply commitment — it is never capped by capacity, and confidence never rewrites it.</td>
         </tr>
         <tr>
           <td><b>Plan (of record)</b></td>
-          <td>The frozen revenue commitment for the cycle, derived from the demand plan by the baseline allocation. The yardstick behind every "vs plan" delta and every P(plan).</td>
-          <td>A forecast. It is a promise, not a prediction — and it never moves inside a cycle.</td>
+          <td>The frozen revenue commitment for the cycle, derived from the demand plan by the baseline supply plan. The yardstick behind every "vs plan" delta and every P(plan). Industry mapping: the revenue line of the AOP, and the internal number behind quarterly street guidance.</td>
+          <td>A forecast. It is a promise, not a prediction — and it never moves inside a cycle. Nor guidance itself: guidance is the external, usually more conservative derivative; the engine anchors on the internal commitment, or P(plan) quietly becomes P(guidance).</td>
         </tr>
         <tr>
           <td><b>Outlook</b></td>
@@ -301,14 +301,14 @@
           <td>The plan (the outlook moves with the context; the plan never does — P(plan) is the measured gap). Nor "the decided version": decidedness is a sign-off, not a kind of line — whichever context the meeting commits, package or none, becomes the <b>decision of record</b>.</td>
         </tr>
         <tr>
-          <td><b>Deterministic baseline</b></td>
-          <td>The feasible greedy allocation that turns the demand plan into the plan of record.</td>
-          <td>An outcome view — it is frozen mechanics, shown only as reference.</td>
+          <td><b>Baseline supply plan</b> <span class="t-tag" style="font-size: 0.72rem">"the baseline"</span></td>
+          <td>The feasible allocation of the demand plan across sites and months — respecting components, capacity and integration — whose revenue becomes the plan of record. "Deterministic" describes how it is computed (zero shocks), not what it is.</td>
+          <td>The base case. The base <i>outlook</i> is a simulation; the baseline is an allocation — frozen mechanics, shown only as reference.</td>
         </tr>
         <tr>
           <td><b>Targets</b></td>
-          <td>Annual financial goals: gross margin, inventory.</td>
-          <td>The plan — same commitment culture, different objects, and labeled separately everywhere.</td>
+          <td>Annual financial goals: gross margin, inventory — the margin and inventory lines of the AOP.</td>
+          <td>The plan — same commitment culture, different objects. Not a synonym for "AOP": the AOP's revenue line is the plan of record, so naming only these AOP would split the term.</td>
         </tr>
         <tr>
           <td><b>Scenario</b> <span class="t-tag" style="font-size: 0.72rem; color: var(--belief)">world</span></td>
