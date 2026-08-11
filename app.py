@@ -1054,9 +1054,12 @@ with tabs[8]:
     # column: both frames at once, never toggled.
     conditioned = spec.name != "Base Case"
     if conditioned:
+        # priced at effective_level — the same confidence backdrop as every
+        # other simulation (the sidebar override applies to action pricing
+        # too); the level is part of the cache key
         with st.spinner(f"Pricing every action in the {spec.name} world..."):
             page_ref_kpi, page_actions = cached_actions(
-                data_seed, sim_seed, min(n_sims, 2000), dc.level,
+                data_seed, sim_seed, min(n_sims, 2000), effective_level,
                 _params_key(spec.overrides), catalog_key, data, baseline,
                 spec.overrides, ACTIONS_CATALOG)
         ref_kpi = page_ref_kpi
