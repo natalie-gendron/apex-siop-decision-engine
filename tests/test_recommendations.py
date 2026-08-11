@@ -103,6 +103,33 @@ def test_executive_summary_conditioned_on_scenario(baseline, base_result, pipeli
     assert "standing base-case outlook" not in plain
 
 
+def test_executive_summary_states_confidence_override(baseline, base_result, pipeline):
+    """With a sidebar confidence override active, the outlook sentence must
+    state both the assessed level and the level the simulations ran at."""
+    from types import SimpleNamespace
+    base_kpi, binding, _, recs = pipeline
+    provider = get_provider("rules")
+    dc = SimpleNamespace(level="Moderate", score=56.0)
+
+    def make_summary(effective):
+        ctx = ReportContext(
+            kpi=base_kpi, risks=detect_risks(base_kpi, binding), binding=binding,
+            family_risk=family_revenue_at_risk(base_result, baseline),
+            capacity_risk=monthly_capacity_risk(base_result),
+            recommendations=recs, demand_confidence=dc,
+            effective_confidence=effective)
+        return provider.executive_summary(ctx)
+
+    overridden = make_summary("Very Low")
+    assert "assessed at Moderate" in overridden
+    assert "override" in overridden
+    assert "run at Very Low" in overridden
+    assert "reflect the override" in overridden
+    for plain in (make_summary(None), make_summary("Moderate")):
+        assert "override" not in plain
+        assert "reflect that assessment" in plain
+
+
 def test_excel_export_builds(tmp_path, data, config, baseline, base_result, pipeline):
     base_kpi, binding, _, recs = pipeline
     xl = build_excel_export(

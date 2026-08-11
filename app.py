@@ -409,7 +409,8 @@ report_ctx = ReportContext(kpi=base_kpi, risks=risks, binding=binding,
                            scenario_kpi=ctx_kpi if ctx_cmp else None,
                            scenario_compare=ctx_cmp,
                            driver_ranking=rankings["FY revenue"],
-                           demand_confidence=dc)
+                           demand_confidence=dc,
+                           effective_confidence=effective_level)
 summary_text = provider.executive_summary(report_ctx)
 
 # context-conditioned counterparts for the Executive Overview (outcome page)
@@ -422,7 +423,7 @@ else:
         family_risk=ctx_fam_risk, capacity_risk=ctx_cap_risk,
         recommendations=recs, scenario_kpi=ctx_kpi, scenario_compare=ctx_cmp,
         driver_ranking=ctx_rankings["FY revenue"], demand_confidence=dc,
-        conditioned_on=context_label))
+        conditioned_on=context_label, effective_confidence=effective_level))
 
 # ---------------------------------------------------------------------------
 # Header + tabs

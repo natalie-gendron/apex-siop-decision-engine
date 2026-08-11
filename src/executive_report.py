@@ -45,6 +45,9 @@ class ReportContext:
     driver_ranking: pd.DataFrame | None = None
     demand_confidence: Any | None = None     # market_intelligence.DemandConfidence
     conditioned_on: str | None = None        # scenario name when not the base case
+    effective_confidence: str | None = None  # level the simulations actually ran
+    #                                          at (sidebar override); None or equal
+    #                                          to the assessed level = no override
 
 
 class NarrativeProvider(ABC):
@@ -102,10 +105,19 @@ class RulesBasedNarrative(NarrativeProvider):
         )
         dc = ctx.demand_confidence
         if dc is not None:
-            text += (f" Demand Confidence is assessed at {dc.level} "
-                     f"({dc.score:.0f}/100); the simulation's demand variance, "
-                     f"push-out and cancellation assumptions reflect that "
-                     f"assessment.")
+            effective = ctx.effective_confidence
+            if effective is not None and effective != dc.level:
+                text += (f" Demand Confidence is assessed at {dc.level} "
+                         f"({dc.score:.0f}/100), but a sidebar override is "
+                         f"active: the simulations run at {effective}, and "
+                         f"their demand variance, push-out and cancellation "
+                         f"assumptions reflect the override, not the "
+                         f"assessment.")
+            else:
+                text += (f" Demand Confidence is assessed at {dc.level} "
+                         f"({dc.score:.0f}/100); the simulation's demand "
+                         f"variance, push-out and cancellation assumptions "
+                         f"reflect that assessment.")
         return text
 
     # ------------------------------------------------------------------
