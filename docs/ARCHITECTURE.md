@@ -133,6 +133,7 @@ sync.
 | **Scenario** (world) | Exogenous hypothesis about what happens *to* the business. | A decision; carries no cost. |
 | **Demand Confidence** (world) | Assessed evidence calibrating demand variance, push-out and cancellation odds around the demand plan. The sidebar shorthand "trust in the forecast" names the least certain slice; the mechanics act on the whole demand plan. | A hypothesis or a toggle. |
 | **Response** (package) | Costed, latency-ramped actions — what the business chooses to *do*. | Part of any world; the only axis where money is spent. |
+| **Decision of record** | The committed outcome of the cycle: the (world, response) context the meeting signs — package or none — with its conditioned outlook and cost. Today: the export's Decision of Record sheet. The planned sign-off loop makes it a first-class state and rolls it into the next cycle's **plan of record**. | An outlook — outlooks are candidates; this term is reserved for the signed one. |
 
 ## Layer map
 
@@ -232,7 +233,8 @@ Streamlit Cloud redeploys from `main`). The plan side does not loop yet: the
 engine models one cycle, forever.
 
 **Planned next capability — closing the loop:** at sign-off, snapshot the
-decision (context evaluated, package approved, expected outcomes), roll the
+**decision of record** (context evaluated, package approved, expected
+outcomes — the term is already reserved in the vocabulary table), roll the
 approved package into the next cycle's plan of record, and show
 cycle-over-cycle drift (what we expected last month vs what the world did).
 Pairs with the V2 real-data seam; both are about the engine living across
