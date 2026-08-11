@@ -114,6 +114,25 @@ or suppress numbers. The clock is the third labeled dimension of every
 figure, handled like the other two: **context × reference frame × clock**,
 separated by element and named in the label, never toggled.
 
+## Vocabulary of record
+
+The same words, used the same way, everywhere — labels, captions,
+narrative, docs. The executive-facing rendering of this table lives in
+`docs/mental-model.html` (§4, embedded in the Guide tab); keep the two in
+sync.
+
+| Term | Means | Is not |
+| --- | --- | --- |
+| **Forecast** | The estimate of demand not yet booked — the uncertain, forward-looking slice of the demand plan. | Booked orders (standard S&OP: orders *consume* forecast; inside the demand time fence only orders count as demand). |
+| **Firm backlog** | Booked orders not yet shipped/recognized — actual demand. | A certainty: push-outs and cancellations still touch it. |
+| **Demand plan** | The unconstrained demand statement: forecast + firm backlog, customer × family × month, at requested dates. | A supply commitment; confidence never rewrites it. |
+| **Plan (of record)** | The frozen revenue commitment for the cycle, derived from the demand plan by the baseline allocation — the yardstick behind every "vs plan" delta and P(plan). Industry analogue: the AOP / "one set of numbers". | A forecast; it never moves inside a cycle, and it never means a response package. |
+| **Deterministic baseline** | The feasible greedy allocation that turns the demand plan into the plan of record. | An outcome view. |
+| **Targets** | Annual financial goals (gross margin, inventory). | The plan. |
+| **Scenario** (world) | Exogenous hypothesis about what happens *to* the business. | A decision; carries no cost. |
+| **Demand Confidence** (world) | Assessed evidence calibrating demand variance, push-out and cancellation odds around the demand plan. The sidebar shorthand "trust in the forecast" names the least certain slice; the mechanics act on the whole demand plan. | A hypothesis or a toggle. |
+| **Response** (package) | Costed, latency-ramped actions — what the business chooses to *do*. | Part of any world; the only axis where money is spent. |
+
 ## Layer map
 
 | Layer | Contents | Code |

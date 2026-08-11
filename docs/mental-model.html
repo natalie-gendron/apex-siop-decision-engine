@@ -256,4 +256,63 @@
     </div>
     <p class="matrix-note">The sidebar sets the tuple (world, response) once — scenario picker, confidence knob, package multiselect — and every named view in the app is one of these four cells. Demand confidence rides along on the world axis in all of them.</p>
   </section>
+
+  <section>
+    <h2>4 — The words, precisely</h2>
+    <div class="tbl-scroll">
+      <table class="matrix">
+        <tr>
+          <th>term</th>
+          <th>means</th>
+          <th>is not</th>
+        </tr>
+        <tr>
+          <td><b>Forecast</b></td>
+          <td>The estimate of demand not yet booked — the forward-looking, uncertain slice of the demand plan.</td>
+          <td>Booked orders. In standard S&amp;OP practice orders <i>consume</i> the forecast; inside the demand time fence only orders count as demand.</td>
+        </tr>
+        <tr>
+          <td><b>Firm backlog</b></td>
+          <td>Booked orders not yet shipped or recognized — actual demand on the books.</td>
+          <td>A certainty. "Firm" describes the booking, not the timing: push-outs and cancellations still touch it.</td>
+        </tr>
+        <tr>
+          <td><b>Demand plan</b></td>
+          <td>The unconstrained demand statement: forecast + firm backlog, customer × family × month, at requested dates.</td>
+          <td>A supply commitment — it is never capped by capacity, and confidence never rewrites it.</td>
+        </tr>
+        <tr>
+          <td><b>Plan (of record)</b></td>
+          <td>The frozen revenue commitment for the cycle, derived from the demand plan by the baseline allocation. The yardstick behind every "vs plan" delta and every P(plan).</td>
+          <td>A forecast. It is a promise, not a prediction — and it never moves inside a cycle.</td>
+        </tr>
+        <tr>
+          <td><b>Deterministic baseline</b></td>
+          <td>The feasible greedy allocation that turns the demand plan into the plan of record.</td>
+          <td>An outcome view — it is frozen mechanics, shown only as reference.</td>
+        </tr>
+        <tr>
+          <td><b>Targets</b></td>
+          <td>Annual financial goals: gross margin, inventory.</td>
+          <td>The plan — same commitment culture, different objects, and labeled separately everywhere.</td>
+        </tr>
+        <tr>
+          <td><b>Scenario</b> <span class="t-tag" style="font-size: 0.72rem; color: var(--belief)">world</span></td>
+          <td>An exogenous hypothesis about what happens <i>to</i> the business.</td>
+          <td>A decision — it carries no cost, ever.</td>
+        </tr>
+        <tr>
+          <td><b>Demand Confidence</b> <span class="t-tag" style="font-size: 0.72rem; color: var(--belief)">world</span></td>
+          <td>Assessed evidence of how uncertain today's world already is; calibrates demand variance, push-out and cancellation odds around the demand plan. The sidebar shorthand "trust in the forecast" names the least certain slice; the mechanics act on the whole demand plan.</td>
+          <td>A hypothesis, or a toggle — it applies to every simulation by default.</td>
+        </tr>
+        <tr>
+          <td><b>Response</b> <span class="t-tag" style="font-size: 0.72rem; color: var(--decision)">package</span></td>
+          <td>What the business chooses to <i>do</i>: costed, latency-ramped actions from the claim-sheet catalog.</td>
+          <td>Part of any world — the response is the only axis where money is spent.</td>
+        </tr>
+      </table>
+    </div>
+    <p class="matrix-note">Aligned with standard S&amp;OP usage (ASCM/APICS): a forecast excludes booked orders, the demand plan is the unconstrained forecast-plus-backlog statement of total demand, and the plan of record plays the "one set of numbers" role the meeting commits to.</p>
+  </section>
 </main>
