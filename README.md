@@ -97,7 +97,7 @@ or to regenerate data. Results are cached and reproducible per seed.
   Mobility Test, Atlas Automotive & Industrial Test, Nexus System-Level Test —
   mapped to end markets (AI/HPC, memory, mobile, automotive, industrial).
 - **8 customers** across IDM, fabless compute, memory, automotive, mobile,
-  OSAT and diversified groups in 7 regions. OSATs are *customers*; Apex builds
+  OSAT and diversified groups in 5 regions. OSATs are *customers*; Apex builds
   through **EMS partners** (Americas, Malaysia, Taiwan, Eastern Europe) and two
   final-integration sites — it owns no wafer fab and no fab concepts are used.
 - **30 critical components** (FPGAs, precision instrumentation, custom PCBs,
@@ -155,22 +155,26 @@ to component stock above 2.5 months forward usage plus aged finished goods.
 
 ## Scenarios & recommendations
 
-Twelve prebuilt scenarios (AI surge, memory recovery/delay, customer push-out,
-FPGA shortage, EMS Malaysia disruption, capacity reservation, overtime/
-expedite, dual-source, inventory reduction, site-readiness delay) plus a fully
-custom scenario. Nine management actions are simulated with **common random
-numbers** against the base case so deltas are clean. Recommendations fire only
-from measurable risk thresholds, cite the simulated impact of a real action,
-pass materiality gates, and expose their scoring weights (EV 35%, probability
-30%, revenue 20%, cash −15%).
+Eight prebuilt scenarios — exogenous world-states only (base case, AI demand
+surge, memory recovery, memory recovery delay, major customer push-out,
+critical FPGA shortage, EMS Malaysia disruption, customer site-readiness
+delay) — plus a fully custom scenario. Fourteen management actions across
+three SIOP horizons (Execution / Tactical / Long-lead), combinable into costed
+response packages, are each simulated with **common random numbers** against a
+no-action reference at the same path count and seed so deltas isolate the
+action's effect. Recommendations fire only from measurable risk thresholds,
+cite the simulated impact of a real action, pass materiality gates, and expose
+their scoring weights (EV 35%, probability 30%, revenue 20%, cash −15%).
 
 ## Test results
 
-`pytest` — **59 passed** (data reproducibility & validity, baseline
+`pytest` — **68 passed** (data reproducibility & validity, baseline
 feasibility vs component/EMS/integration constraints, financial identities,
-simulation reproducibility & bounds, correlation PSD & co-movement, all 12
-scenarios run, comparison reconciliation, recommendation traceability &
-materiality, dynamic summary, Excel export integrity).
+simulation reproducibility & bounds, correlation PSD & co-movement, all 8
+scenarios run, comparison reconciliation, equal-path-count action pricing,
+recommendation traceability & materiality, dynamic summary — including the
+confidence-override wording, Excel export integrity, and headless AppTest
+runs of the full dashboard).
 
 ## Known limitations (Version 1)
 
