@@ -1261,7 +1261,13 @@ cadence. The executive meeting exists to answer four questions, in order:
 do about it?* — and then sign the result and record it. Every page in this
 app supports one of those questions.
         """)
-    st.iframe(Path(__file__).parent / "docs" / "mental-model.html")
+    # Stamp the app's active theme onto the embedded page — inside the
+    # iframe, prefers-color-scheme reports the OS setting, not the app's.
+    _guide_html = (Path(__file__).parent / "docs"
+                   / "mental-model.html").read_text(encoding="utf-8")
+    st.iframe(f'<!doctype html><html data-theme="{st.context.theme.type}">'
+              f'<head><meta charset="utf-8"></head>'
+              f'<body>{_guide_html}</body></html>')
     st.markdown(
         """
 **Reading the picture into practice.** The sidebar sets the evaluation
