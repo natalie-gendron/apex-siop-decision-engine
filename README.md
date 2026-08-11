@@ -46,7 +46,7 @@ comparison  →  sensitivity ranking  →  recommendations  →  executive summa
 | `src/recommendations.py` | Threshold-triggered, simulation-backed, scored recommendations |
 | `src/executive_report.py` | Rules-based dynamic executive summary (LLM-ready abstraction, no API needed) |
 | `src/visualizations.py` | Executive Plotly figures (validated accessible palette) |
-| `src/exports.py` | 15-sheet formatted Excel workbook |
+| `src/exports.py` | 15-sheet formatted Excel workbook (plus a decision-of-record sheet when an evaluation context is active) |
 | `app.py` | 11-tab Streamlit executive dashboard |
 
 ## Demand Confidence

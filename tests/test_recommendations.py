@@ -143,3 +143,35 @@ def test_excel_export_builds(tmp_path, data, config, baseline, base_result, pipe
                   "Monthly Baseline", "Product Families", "Component Risk",
                   "Sensitivity", "Recommendations", "Methodology"]:
         assert sheet in wb.sheetnames
+    # base-anchored by design: no decision sheet without an active context
+    assert "Decision of Record" not in wb.sheetnames
+
+
+def test_excel_export_decision_of_record_sheet(
+        tmp_path, data, config, baseline, base_result, pipeline):
+    """With an evaluation context active, the workbook gains one explicitly
+    labeled decision-of-record sheet; the rest stays base-anchored."""
+    from src.scenarios import compare_scenarios
+    base_kpi, binding, action_results, recs = pipeline
+    name, (kpi, spec) = next(iter(action_results.items()))
+    cmp = compare_scenarios(base_kpi, kpi, spec.action_cost_usd)
+    decision = {"world": "Critical FPGA Shortage",
+                "actions": [{"name": name, "cost": spec.action_cost_usd}],
+                "package_cost": spec.action_cost_usd,
+                "base_kpi": base_kpi, "ctx_kpi": kpi, "compare": cmp}
+    xl = build_excel_export(
+        base_kpi, baseline, base_result, "Summary.\n\nSecond.",
+        [], family_revenue_at_risk(base_result, baseline), binding,
+        all_driver_rankings(base_result), recs, data.components, data.demand,
+        decision=decision)
+    path = tmp_path / "export_decision.xlsx"
+    path.write_bytes(xl)
+    wb = load_workbook(path)
+    assert "Decision of Record" in wb.sheetnames
+    ws = wb["Decision of Record"]
+    cells = [str(c.value) for row in ws.iter_rows() for c in row if c.value]
+    text = " ".join(cells)
+    assert "Critical FPGA Shortage" in text
+    assert name in text
+    assert "Base outlook (base, no actions)" in text
+    assert "Conditioned on the decision" in text

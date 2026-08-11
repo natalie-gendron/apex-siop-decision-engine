@@ -90,8 +90,16 @@ def build_excel_export(
     recommendations: list[Recommendation],
     components: pd.DataFrame,
     demand: pd.DataFrame,
+    decision: "dict[str, Any] | None" = None,
 ) -> bytes:
-    """Assemble the full workbook and return it as bytes for download."""
+    """Assemble the full workbook and return it as bytes for download.
+
+    The workbook is anchored to the standing base outlook (base, no actions)
+    by design — see ARCHITECTURE.md. When an evaluation context is active,
+    `decision` adds one explicitly labeled "Decision of Record" sheet
+    capturing the context: {"world": str, "actions": [{"name", "cost"}],
+    "package_cost": float, "base_kpi": ..., "ctx_kpi": ...,
+    "compare": compare_scenarios(base, ctx)}."""
     buf = io.BytesIO()
     with pd.ExcelWriter(buf, engine="openpyxl") as writer:
         # 1. Executive summary
@@ -271,6 +279,84 @@ def build_excel_export(
                                   "Gross profit protected", "Incremental cost",
                                   "Δ inventory", "Δ working capital"),
                       pct_cols=("Δ P(plan)",))
+
+        # 13b. Decision of record — only when an evaluation context is active.
+        # The rest of the workbook stays anchored to (base, ∅); this sheet is
+        # the explicitly labeled record of the decision the meeting evaluated.
+        if decision is not None:
+            b_kpi, c_kpi = decision["base_kpi"], decision["ctx_kpi"]
+            pkg = decision["actions"]
+            head_rows = [
+                {"Item": "World evaluated (scenario)", "Value": decision["world"]},
+                {"Item": "Response package",
+                 "Value": f"{len(pkg)} action(s)" if pkg else "none"},
+            ]
+            head_rows += [
+                {"Item": f"  package action {i}",
+                 "Value": f"{a['name']} — cost ${a['cost'] / 1e6:,.1f}M"}
+                for i, a in enumerate(pkg, 1)]
+            head_rows.append(
+                {"Item": "Package decision cost (charged to Q1 opex)",
+                 "Value": f"${decision['package_cost'] / 1e6:,.1f}M"})
+            head = pd.DataFrame(head_rows)
+            _write_df(writer, "Decision of Record", head,
+                      "Decision of record — evaluated context (world, response)",
+                      "Every other sheet stays anchored to the standing base "
+                      "outlook (no scenario, no actions) by design; this sheet "
+                      "records the context evaluated at export time.")
+            ws = writer.sheets["Decision of Record"]
+            ws.column_dimensions["A"].width = 40
+            ws.column_dimensions["B"].width = 52
+
+            kpi_keys = [
+                ("Expected Q1 revenue", lambda k: k["q1_revenue"]["mean"], MONEY_FMT),
+                ("P(Q1 revenue plan)", lambda k: k["p_q1_plan"], PCT_FMT),
+                ("Expected FY revenue", lambda k: k["fy_revenue"]["mean"], MONEY_FMT),
+                ("P(FY revenue plan)", lambda k: k["p_fy_plan"], PCT_FMT),
+                ("Expected FY gross margin", lambda k: k["fy_gm"]["mean"], PCT_FMT),
+                ("FY revenue at risk (P5 vs plan)",
+                 lambda k: k["fy_revenue_at_risk"], MONEY_FMT),
+                ("Expected FY gross profit",
+                 lambda k: k["fy_gross_profit"]["mean"], MONEY_FMT),
+                ("Year-end inventory (mean)",
+                 lambda k: k["ending_inventory"]["mean"], MONEY_FMT),
+                ("FY service level (fill rate)",
+                 lambda k: k["service_level"]["mean"], PCT_FMT),
+            ]
+            cmp_rows = [{"KPI": label,
+                         "Base outlook (base, no actions)": f(b_kpi),
+                         "Conditioned on the decision": f(c_kpi),
+                         "Δ": f(c_kpi) - f(b_kpi)}
+                        for label, f, _ in kpi_keys]
+            fmts = [fmt for _, _, fmt in kpi_keys]
+            if pkg:
+                cmp_rows.append({
+                    "KPI": "FY incremental EV (net of package cost)",
+                    "Base outlook (base, no actions)": None,
+                    "Conditioned on the decision": None,
+                    "Δ": decision["compare"]["incremental_ev"]})
+                fmts.append(MONEY_FMT)
+            cmp_df = pd.DataFrame(cmp_rows)
+            title_row = len(head) + 6          # two blank rows below table 1
+            hdr = title_row + 1
+            cmp_df.to_excel(writer, sheet_name="Decision of Record",
+                            startrow=hdr - 1, index=False)
+            ws.cell(row=title_row, column=1,
+                    value="Conditioned outlook vs the standing base outlook"
+                    ).font = TITLE_FONT
+            for j in range(1, len(cmp_df.columns) + 1):
+                cell = ws.cell(row=hdr, column=j)
+                cell.fill = HEADER_FILL
+                cell.font = HEADER_FONT
+                cell.alignment = Alignment(vertical="center", wrap_text=True)
+                if j > 1:
+                    ws.column_dimensions[get_column_letter(j)].width = 28
+            for i, fmt in enumerate(fmts):
+                for j in range(1, len(cmp_df.columns) + 1):
+                    cell = ws.cell(row=hdr + 1 + i, column=j)
+                    cell.border = BORDER
+                    if j > 1 and isinstance(cell.value, (int, float)):
+                        cell.number_format = fmt
 
         # 14. Assumptions
         prod_cols = components.columns.tolist()

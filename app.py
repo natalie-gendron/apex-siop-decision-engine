@@ -1359,11 +1359,28 @@ engine's planned next capability.
         scenario_rows_all.append(
             compare_scenarios(base_kpi, kpi_summary(r, baseline, CONFIG),
                               s.action_cost_usd))
+    # the workbook stays anchored to (base, ∅); an active evaluation context
+    # is captured as one explicitly labeled decision-of-record sheet
+    decision_record = None
+    if ctx_cmp:
+        decision_record = {
+            "world": spec.name,
+            "actions": [{"name": a.name, "cost": a.action_cost_usd}
+                        for a in package_specs],
+            "package_cost": package_cost,
+            "base_kpi": base_kpi, "ctx_kpi": ctx_kpi, "compare": ctx_cmp,
+        }
     xl_bytes = build_excel_export(
         base_kpi, baseline, base_result,
         summary_text + "\n\n" + provider.appendix(report_ctx),
         scenario_rows_all, fam_risk, binding, rankings, recs,
-        data.components, data.demand)
+        data.components, data.demand, decision=decision_record)
+    if decision_record:
+        st.caption(md(f"An evaluation context is active — the workbook gains "
+                      f"a **Decision of Record** sheet capturing "
+                      f"**{context_label}** and its conditioned outlook vs "
+                      f"the base outlook. All other sheets stay anchored to "
+                      f"the standing base outlook."))
     st.download_button("Download Excel workbook (.xlsx)", xl_bytes,
                        file_name="apex_siop_readout.xlsx",
                        mime="application/vnd.openxmlformats-officedocument"
