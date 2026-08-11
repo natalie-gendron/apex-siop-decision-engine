@@ -199,6 +199,7 @@
              neither — it only breathes the band. -->
         <g transform="translate(0, 20)">
           <text class="t-title t-title-w" x="10" y="8">CONFIDENCE — CALIBRATION</text>
+          <text class="t-tag" x="10" y="26">three demand knobs → outcome band</text>
           <polygon class="fan" points="10,170 270,50 270,190"></polygon>
           <polygon class="fan-inner" points="10,170 270,85 270,155"></polygon>
           <path class="center-w" d="M10 170 L270 120"></path>
@@ -237,7 +238,7 @@
         </g>
       </svg>
       </div>
-      <figcaption><b>The distinction that matters most, drawn.</b> These panels live in outcome space, and every <b>solid line is an outlook</b> — what a context is expected to produce — named by its context: the <b>base outlook</b>, the <b>scenario outlook</b> (unmitigated), the <b>conditioned outlook</b> (scenario + response). The <b>dashed line</b> is always the plan of record. The demand plan is deliberately not drawn here — it is an input, not an outcome, and lives in figure 1; every outlook is what it produces once pushed through supply. Confidence is trust in the <i>forecast</i>, but it acts only on the band: it rewrites nothing and moves no line. A scenario moves the outlook; the plan stays put because it is what everything is measured against. A response then claws back part of the gap, and unlike the other two knobs, it costs money.</figcaption>
+      <figcaption><b>The distinction that matters most, drawn.</b> These panels live in outcome space, and every <b>solid line is an outlook</b> — what a context is expected to produce — named by its context: the <b>base outlook</b>, the <b>scenario outlook</b> (unmitigated), the <b>conditioned outlook</b> (scenario + response). The <b>dashed line</b> is always the plan of record. The demand plan is deliberately not drawn here — it is an input, not an outcome, and lives in figure 1; every outlook is what it produces once pushed through supply. Confidence is trust in the <i>forecast</i>, and its three knobs are all demand-side — demand volatility, push-out odds, cancellation odds; supply assumptions are untouched. What you see it move is the band, because that is where demand uncertainty lands after supply has its say: it rewrites nothing and moves no line. A scenario moves the outlook; the plan stays put because it is what everything is measured against. A response then claws back part of the gap, and unlike the other two knobs, it costs money.</figcaption>
     </figure>
   </section>
 
@@ -297,7 +298,7 @@
         <tr>
           <td><b>Outlook</b></td>
           <td>The simulated outcome distribution for a context — what the demand plan, pushed through supply and calibrated by evidence, is expected to produce. Always named by its context: the <b>base outlook</b> (base, no response), a <b>scenario outlook</b> (unmitigated world), the <b>conditioned outlook</b> (world + response). Drawn as the solid line (center) and band.</td>
-          <td>The plan. The outlook moves with the context; the plan never does — P(plan) is the gap between them, measured.</td>
+          <td>The plan (the outlook moves with the context; the plan never does — P(plan) is the measured gap). Nor "the decided version": decidedness is a sign-off, not a kind of line — whichever context the meeting commits, package or none, becomes the <b>decision of record</b>.</td>
         </tr>
         <tr>
           <td><b>Deterministic baseline</b></td>
@@ -317,7 +318,7 @@
         <tr>
           <td><b>Demand Confidence</b> <span class="t-tag" style="font-size: 0.72rem; color: var(--belief)">world</span></td>
           <td>Assessed evidence of how uncertain today's world already is; calibrates demand variance, push-out and cancellation odds around the demand plan. The sidebar shorthand "trust in the forecast" names the least certain slice; the mechanics act on the whole demand plan.</td>
-          <td>A hypothesis, or a toggle — it applies to every simulation by default.</td>
+          <td>A hypothesis, a toggle, or a supply adjustment — all three of its knobs are demand-side, and it applies to every simulation by default.</td>
         </tr>
         <tr>
           <td><b>Response</b> <span class="t-tag" style="font-size: 0.72rem; color: var(--decision)">package</span></td>
