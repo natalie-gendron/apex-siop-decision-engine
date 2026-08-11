@@ -1098,7 +1098,13 @@ with tabs[8]:
             "Δ working capital ($M)": cmpv["d_working_capital"] / 1e6,
             "Δ service (pts)": cmpv["d_service"] * 100,
             "Cost ($M)": aspec.action_cost_usd / 1e6,
-            "Incremental EV ($M)": cmpv["incremental_ev"] / 1e6}
+            "Incremental EV ($M)": cmpv["incremental_ev"] / 1e6,
+            # second EV frame: same net EV over all 18 months, so long-lead
+            # actions whose benefits land in months 13-18 aren't structurally
+            # buried by the FY window — two labeled frames, never toggled
+            "EV full horizon ($M)": (kpi["horizon_gross_profit"]["mean"]
+                                     - ref_kpi["horizon_gross_profit"]["mean"]
+                                     - aspec.action_cost_usd) / 1e6}
         if conditioned and name in action_results:
             base_cmp = compare_scenarios(action_ref_kpi, action_results[name][0],
                                          aspec.action_cost_usd)
@@ -1145,12 +1151,16 @@ with tabs[8]:
                f"action and its reference both run at {min(n_sims, 2000):,} "
                "paths on the same seed — so differences are the action's "
                "effect alone. (Headline tiles run at the sidebar mode's full "
-               "path count.) All deltas and EV are measured over the "
-               "fiscal-year window (first 12 months); each action carries a "
-               "SIOP horizon (Execution 0-3 mo / Tactical 1-3 qtrs / Long-lead "
-               "6-18 mo) and a realistic effective-month latency, so long-lead "
-               "actions show little or no Q1 effect — and part of their benefit "
-               "falls beyond the EV window — by construction. Scoring weights: "
+               "path count.) All deltas and 'Incremental EV' are measured "
+               "over the fiscal-year window (first 12 months) — the window "
+               "the plan is judged on; 'EV full horizon' is the same net EV "
+               "over all 18 months, so long-lead actions whose benefits land "
+               "in months 13-18 aren't structurally buried. Two labeled "
+               "frames, deliberately not toggled; ranking uses the FY frame. "
+               "Each action carries a SIOP horizon (Execution 0-3 mo / "
+               "Tactical 1-3 qtrs / Long-lead 6-18 mo) and a realistic "
+               "effective-month latency, so long-lead actions show little or "
+               "no Q1 effect by construction. Scoring weights: "
                "EV 35%, probability 30%, revenue 20%, cash use −15%. "
                "Materiality gates: EV > −\\$1M and (ΔP ≥ 1pt or EV ≥ \\$2M).")
     st.markdown("#### Ranked recommendations"
