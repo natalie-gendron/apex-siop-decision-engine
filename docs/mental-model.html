@@ -191,7 +191,7 @@
     <h2>2 — What each knob does to the fan</h2>
     <figure>
       <div class="fig-scroll">
-      <svg viewBox="0 0 880 260" role="img" aria-label="Three panels drawn in outcome space; every solid line is an outlook named by its context. Confidence widens or narrows the uncertainty band around an unmoved base outlook, with the dashed plan-of-record line just below it, also unmoved. A scenario shifts the outlook away while the dashed plan line stays put as the yardstick. A response bends the outlook partly back toward the plan — the conditioned outlook — at a cost, with the unmitigated path shown as a dotted ghost.">
+      <svg viewBox="0 0 880 260" role="img" aria-label="Three panels drawn in outcome space; every solid line is an outlook named by its context. Confidence widens or narrows the uncertainty band around an unmoved base outlook, with the dashed plan-of-record line just below it, also unmoved. A scenario shifts the outlook away while the dashed plan line stays put as the yardstick. A response bends the outlook partly back toward the plan — the conditioned outlook — at a decision cost charged to income, with the unmitigated path shown as a dotted ghost.">
         <!-- Panel A: confidence. Solid line = central outlook (what the demand
              plan implies, pushed through supply); dashed = plan of record.
              Two distinct lines by design: the outlook sits above the plan
@@ -232,13 +232,12 @@
           <text class="t-tag" x="262" y="112" text-anchor="end">plan</text>
           <text class="t-tag" x="262" y="130" text-anchor="end" style="fill: var(--decision)">conditioned outlook</text>
           <text class="t-small" x="262" y="182" text-anchor="end">unmitigated</text>
-          <text class="t-tag" x="150" y="200" style="fill: var(--decision)">$ package cost</text>
           <line class="ghost" x1="10" y1="210" x2="270" y2="210"></line>
-          <text class="t-small" x="10" y="232">buys back part of the gap — at a cost</text>
+          <text class="t-small" x="10" y="232">buys back part of the gap — at a decision cost</text>
         </g>
       </svg>
       </div>
-      <figcaption><b>The distinction that matters most, drawn.</b> These panels live in outcome space, and every <b>solid line is an outlook</b> — what a context is expected to produce — named by its context: the <b>base outlook</b>, the <b>scenario outlook</b> (unmitigated), the <b>conditioned outlook</b> (scenario + response). The <b>dashed line</b> is always the plan of record. The demand plan is deliberately not drawn here — it is an input, not an outcome, and lives in figure 1; every outlook is what it produces once pushed through supply. Confidence is trust in the <i>forecast</i>, and its three knobs are all demand-side — demand volatility, push-out odds, cancellation odds; supply assumptions are untouched. What you see it move is the band, because that is where demand uncertainty lands after supply has its say: it rewrites nothing and moves no line. A scenario moves the outlook; the plan stays put because it is what everything is measured against. A response then claws back part of the gap, and unlike the other two knobs, it costs money.</figcaption>
+      <figcaption><b>The distinction that matters most, drawn.</b> These panels live in outcome space, and every <b>solid line is an outlook</b> — what a context is expected to produce — named by its context: the <b>base outlook</b>, the <b>scenario outlook</b> (unmitigated), the <b>conditioned outlook</b> (scenario + response). The <b>dashed line</b> is always the plan of record. The demand plan is deliberately not drawn here — it is an input, not an outcome, and lives in figure 1; every outlook is what it produces once pushed through supply. Confidence is trust in the <i>forecast</i>, and its three knobs are all demand-side — demand volatility, push-out odds, cancellation odds; supply assumptions are untouched. What you see it move is the band, because that is where demand uncertainty lands after supply has its say: it rewrites nothing and moves no line. A scenario moves the outlook; the plan stays put because it is what everything is measured against. A response then claws back part of the gap, and unlike the other two knobs, it costs money — a decision cost charged to income, which is why it appears in this app as EV net of cost rather than as anything drawable in revenue space.</figcaption>
     </figure>
   </section>
 
@@ -322,7 +321,7 @@
         </tr>
         <tr>
           <td><b>Response</b> <span class="t-tag" style="font-size: 0.72rem; color: var(--decision)">package</span></td>
-          <td>What the business chooses to <i>do</i>: costed, latency-ramped actions from the claim-sheet catalog.</td>
+          <td>What the business chooses to <i>do</i>: costed, latency-ramped actions from the claim-sheet catalog. Each action carries a <b>decision cost</b>; package costs sum and are charged to Q1 operating income, so every EV is quoted net of cost.</td>
           <td>Part of any world — the response is the only axis where money is spent.</td>
         </tr>
         <tr>

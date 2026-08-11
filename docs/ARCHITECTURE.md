@@ -132,7 +132,7 @@ sync.
 | **Targets** | Annual financial goals (gross margin, inventory) — the margin and inventory lines of the AOP. | The plan. Not a synonym for "AOP": the AOP's revenue line is the plan of record, so naming only these AOP would split the term. |
 | **Scenario** (world) | Exogenous hypothesis about what happens *to* the business. | A decision; carries no cost. |
 | **Demand Confidence** (world) | Assessed evidence calibrating demand variance, push-out and cancellation odds around the demand plan. The sidebar shorthand "trust in the forecast" names the least certain slice; the mechanics act on the whole demand plan. | A hypothesis or a toggle. |
-| **Response** (package) | Costed, latency-ramped actions — what the business chooses to *do*. | Part of any world; the only axis where money is spent. |
+| **Response** (package) | Costed, latency-ramped actions — what the business chooses to *do*. Each action carries a **decision cost**; package costs sum and are charged to Q1 operating income, so every EV is quoted net of cost. | Part of any world; the only axis where money is spent. |
 | **Decision of record** | The committed outcome of the cycle: the (world, response) context the meeting signs — package or none — with its conditioned outlook and cost. Today: the export's Decision of Record sheet. The planned sign-off loop makes it a first-class state and rolls it into the next cycle's **plan of record**. | An outlook — outlooks are candidates; this term is reserved for the signed one. |
 
 ## Layer map
