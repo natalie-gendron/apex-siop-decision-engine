@@ -1016,21 +1016,22 @@ with tabs[7]:
             "d_working_capital": "Δ year-end working capital",
             "d_expedite": "Δ FY expedite cost", "d_service": "Δ FY service",
             "d_revenue_at_risk": "FY revenue-at-risk reduced",
-            "action_cost": "Decision cost",
-            "incremental_ev": "FY incremental EV",
-            "risk_reduced_per_dollar": "Risk reduced per dollar"}
+            "incremental_ev": "FY incremental EV"}
         money = {"Δ Q1 revenue", "Δ FY revenue", "Δ FY gross profit",
                  "Δ year-end inventory", "Δ year-end working capital",
                  "Δ FY expedite cost", "FY revenue-at-risk reduced",
-                 "Decision cost", "FY incremental EV"}
+                 "FY incremental EV"}
         pts = {"Δ P(Q1 plan)", "Δ P(FY plan)", "Δ FY gross margin",
                "Δ FY service"}
+        # scenarios are exogenous and carry no decision cost by doctrine —
+        # the response-axis columns (a $0 "Decision cost", a NaN "Risk
+        # reduced per dollar") belong to actions, not to a worlds-only table
         disp = (pd.DataFrame(rows).set_index("scenario")
+                .drop(columns=["action_cost", "risk_reduced_per_dollar"])
                 .rename(columns=col_names))
         st.dataframe(disp.style.format(
             {**{c: (lambda v: fmt_money(v)) for c in money},
-             **{c: (lambda v: fmt_pts(v)) for c in pts},
-             "Risk reduced per dollar": "{:.1f}"}), width='stretch')
+             **{c: (lambda v: fmt_pts(v)) for c in pts}}), width='stretch')
     if world_result is not base_result:
         st.plotly_chart(viz.revenue_bridge(base_kpi, world_kpi),
                         width='stretch')
