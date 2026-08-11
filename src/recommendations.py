@@ -153,10 +153,20 @@ def build_recommendations(
     base_kpi: dict[str, Any],
     action_results: dict[str, tuple[dict[str, Any], ScenarioSpec]],
     binding, min_ev_usd: float = -1.0e6, demand_confidence=None,
+    ref_kpi: "dict[str, Any] | None" = None,
 ) -> list[Recommendation]:
-    """Score simulated actions against detected risks; emit ranked recommendations."""
+    """Score simulated actions against detected risks; emit ranked recommendations.
+
+    Risks are detected on `base_kpi` (the headline result for the world being
+    narrated). Action deltas are differenced against `ref_kpi` — a no-action
+    simulation of the same world at the SAME path count and seed as the
+    action runs. Under common random numbers a difference isolates the
+    action's effect only at equal path counts; when the actions were run at
+    the headline count, omit `ref_kpi` (it defaults to `base_kpi`)."""
     import pandas as pd  # local import to keep module load light
 
+    if ref_kpi is None:
+        ref_kpi = base_kpi
     risks = detect_risks(base_kpi, binding, demand_confidence)
     if not risks:
         return []
@@ -170,13 +180,13 @@ def build_recommendations(
         matched = [risk_by_tag[t] for t in tags if t in risk_by_tag]
         if not matched:
             continue
-        d_gp = kpi["fy_gross_profit"]["mean"] - base_kpi["fy_gross_profit"]["mean"]
-        d_rev = kpi["fy_revenue"]["mean"] - base_kpi["fy_revenue"]["mean"]
-        d_p = kpi["p_fy_plan"] - base_kpi["p_fy_plan"]
-        d_p_q1 = kpi["p_q1_plan"] - base_kpi["p_q1_plan"]
-        d_inv = kpi["ending_inventory"]["mean"] - base_kpi["ending_inventory"]["mean"]
-        d_wc = kpi["working_capital"]["mean"] - base_kpi["working_capital"]["mean"]
-        d_sl = kpi["service_level"]["mean"] - base_kpi["service_level"]["mean"]
+        d_gp = kpi["fy_gross_profit"]["mean"] - ref_kpi["fy_gross_profit"]["mean"]
+        d_rev = kpi["fy_revenue"]["mean"] - ref_kpi["fy_revenue"]["mean"]
+        d_p = kpi["p_fy_plan"] - ref_kpi["p_fy_plan"]
+        d_p_q1 = kpi["p_q1_plan"] - ref_kpi["p_q1_plan"]
+        d_inv = kpi["ending_inventory"]["mean"] - ref_kpi["ending_inventory"]["mean"]
+        d_wc = kpi["working_capital"]["mean"] - ref_kpi["working_capital"]["mean"]
+        d_sl = kpi["service_level"]["mean"] - ref_kpi["service_level"]["mean"]
         ev = d_gp - spec.action_cost_usd
         # materiality gates
         if ev < min_ev_usd:

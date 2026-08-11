@@ -120,8 +120,19 @@ def cached_actions(data_seed: int, sim_seed: int, n_sims: int,
     """Evaluate all actions on a given backdrop: confidence + optional scenario
     context (empty context = the standing base-case evaluation). catalog_key
     is derived from the claim-sheet contents, so edited or what-if catalogs
-    reprice instead of returning stale cached results."""
+    reprice instead of returning stale cached results.
+
+    Returns (reference_kpi, {action: (kpi, spec)}). The reference is the same
+    backdrop with no action, at the SAME path count and seed as the action
+    runs: under common random numbers a difference isolates the action's
+    effect only at equal path counts, so action deltas must never be taken
+    against the full-count headline KPIs."""
     conf = CONFIDENCE_SIM_PARAMS[confidence_level]
+    ref = run_simulation(_data, CONFIG, _baseline,
+                         params=merge_confidence_params(conf, _context),
+                         n_sims=n_sims, seed=sim_seed,
+                         scenario_name="Action-pricing reference")
+    ref_kpi = kpi_summary(ref, _baseline, CONFIG)
     out = {}
     for name, spec in _catalog.items():
         stacked = merge_confidence_params(_context, spec.overrides)
@@ -129,7 +140,7 @@ def cached_actions(data_seed: int, sim_seed: int, n_sims: int,
                            params=merge_confidence_params(conf, stacked),
                            n_sims=n_sims, seed=sim_seed, scenario_name=name)
         out[name] = (kpi_summary(r, _baseline, CONFIG), spec)
-    return out
+    return ref_kpi, out
 
 
 # ---------------------------------------------------------------------------
@@ -356,9 +367,9 @@ else:
     ctx_result = world_result
 
 progress.progress(0.7, text="Scoring management actions...")
-action_results = cached_actions(data_seed, sim_seed, min(n_sims, 2000),
-                                effective_level, "base", catalog_key,
-                                data, baseline, {}, ACTIONS_CATALOG)
+action_ref_kpi, action_results = cached_actions(
+    data_seed, sim_seed, min(n_sims, 2000), effective_level, "base",
+    catalog_key, data, baseline, {}, ACTIONS_CATALOG)
 progress.progress(1.0, text="Done")
 progress.empty()
 
@@ -388,7 +399,7 @@ else:
 ctx_suffix = "" if ctx_result is base_result else f" — {context_label}"
 risks = detect_risks(base_kpi, binding, dc)
 recs = build_recommendations(base_kpi, action_results, binding,
-                             demand_confidence=dc)
+                             demand_confidence=dc, ref_kpi=action_ref_kpi)
 
 # plan-of-record narrative — anchors the Excel export regardless of context
 provider = get_provider("rules")
@@ -559,7 +570,7 @@ with tabs[0]:
                 and all(n in action_results for n in package_names):
             additive = sum(
                 action_results[n][0]["fy_gross_profit"]["mean"]
-                - base_kpi["fy_gross_profit"]["mean"]
+                - action_ref_kpi["fy_gross_profit"]["mean"]
                 - ACTIONS_CATALOG[n].action_cost_usd for n in package_names)
             st.caption(md(
                 f"Interaction check: the package's incremental EV is "
@@ -1043,11 +1054,11 @@ with tabs[8]:
     conditioned = spec.name != "Base Case"
     if conditioned:
         with st.spinner(f"Pricing every action in the {spec.name} world..."):
-            page_actions = cached_actions(data_seed, sim_seed, min(n_sims, 2000),
-                                          dc.level, _params_key(spec.overrides),
-                                          catalog_key, data, baseline,
-                                          spec.overrides, ACTIONS_CATALOG)
-        ref_kpi = world_kpi
+            page_ref_kpi, page_actions = cached_actions(
+                data_seed, sim_seed, min(n_sims, 2000), dc.level,
+                _params_key(spec.overrides), catalog_key, data, baseline,
+                spec.overrides, ACTIONS_CATALOG)
+        ref_kpi = page_ref_kpi
         st.info(f"Every number below answers *\"if {spec.name} occurs, what "
                 f"does this action buy us?\"* — each action is simulated on "
                 f"top of the scenario and compared against the scenario "
@@ -1059,7 +1070,7 @@ with tabs[8]:
                 f"rise in a shortage).")
     else:
         page_actions = action_results
-        ref_kpi = base_kpi
+        ref_kpi = action_ref_kpi
         st.caption("Actions are priced in the base world — the standing "
                    "outlook. Select a scenario in the sidebar and this table "
                    "reprices automatically in that world (with the base-world "
@@ -1084,7 +1095,7 @@ with tabs[8]:
             "Cost ($M)": aspec.action_cost_usd / 1e6,
             "Incremental EV ($M)": cmpv["incremental_ev"] / 1e6}
         if conditioned and name in action_results:
-            base_cmp = compare_scenarios(base_kpi, action_results[name][0],
+            base_cmp = compare_scenarios(action_ref_kpi, action_results[name][0],
                                          aspec.action_cost_usd)
             row["EV in base world ($M)"] = base_cmp["incremental_ev"] / 1e6
         act_rows.append(row)
@@ -1125,8 +1136,11 @@ with tabs[8]:
         width='stretch')
     ref_label = f"the {spec.name} scenario" if conditioned else "the base case"
     st.caption(f"Every delta is action-versus-{ref_label} on identical simulated "
-               "futures (common random numbers), so differences are the action's "
-               "effect alone. All deltas and EV are measured over the "
+               "futures (common random numbers) at matched path counts — the "
+               f"action and its reference both run at {min(n_sims, 2000):,} "
+               "paths on the same seed — so differences are the action's "
+               "effect alone. (Headline tiles run at the sidebar mode's full "
+               "path count.) All deltas and EV are measured over the "
                "fiscal-year window (first 12 months); each action carries a "
                "SIOP horizon (Execution 0-3 mo / Tactical 1-3 qtrs / Long-lead "
                "6-18 mo) and a realistic effective-month latency, so long-lead "
@@ -1139,8 +1153,9 @@ with tabs[8]:
     if conditioned:
         world_binding = (binding if world_result is base_result else
                          binding_components(world_result))
-        page_recs = build_recommendations(ref_kpi, page_actions, world_binding,
-                                          demand_confidence=dc)
+        page_recs = build_recommendations(world_kpi, page_actions, world_binding,
+                                          demand_confidence=dc,
+                                          ref_kpi=page_ref_kpi)
         st.caption("Ranked for the conditioned world. The Executive Overview's "
                    "top actions remain anchored to the base case.")
     else:
