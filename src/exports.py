@@ -153,14 +153,18 @@ def build_excel_export(
                 "d_p_fy_plan": "Δ P(FY plan)", "d_fy_gm": "Δ FY GM",
                 "d_gross_profit": "Δ gross profit", "d_inventory": "Δ inventory",
                 "d_working_capital": "Δ working capital", "d_expedite": "Δ expedite",
-                "d_service": "Δ service level", "d_revenue_at_risk": "Δ revenue at risk",
+                "d_service": "Δ service level",
+                # sign-flipped in compare_scenarios: positive = risk REDUCED —
+                # the label must match the app's, not read as a raw delta
+                "d_revenue_at_risk": "FY revenue-at-risk reduced",
                 "action_cost": "Action cost", "incremental_ev": "Incremental EV",
                 "risk_reduced_per_dollar": "Risk reduced per $"})
             _write_df(writer, "Scenario Comparison", sc,
                       "Scenario deltas versus base case",
                       money_cols=("Δ Q1 revenue", "Δ FY revenue", "Δ gross profit",
                                   "Δ inventory", "Δ working capital", "Δ expedite",
-                                  "Δ revenue at risk", "Action cost", "Incremental EV"),
+                                  "FY revenue-at-risk reduced", "Action cost",
+                                  "Incremental EV"),
                       pct_cols=("Δ P(Q1 plan)", "Δ P(FY plan)", "Δ FY GM",
                                 "Δ service level"))
 
