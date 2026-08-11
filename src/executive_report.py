@@ -77,12 +77,13 @@ class RulesBasedNarrative(NarrativeProvider):
     def _outlook(self, ctx: ReportContext) -> str:
         k = ctx.kpi
         p_q1, p_fy, p_gm = k["p_q1_plan"], k["p_fy_plan"], k["p_gm_target"]
-        gap_q1 = k["q1_revenue"]["median"] - k["q1_plan"]
+        # "Expected" = the mean, matching the Overview tile; the median and
+        # the plan are each labeled as what they are so the sentence cannot
+        # be read as contradicting the tile
+        gap_q1 = k["q1_revenue"]["mean"] - k["q1_plan"]
         tone = ("broadly on track" if p_q1 >= 0.7 and p_gm >= 0.55
                 else "achievable but at risk" if p_q1 >= 0.5
                 else "unlikely to be achieved without intervention")
-        gap_txt = (f"{fmt_money(abs(gap_q1))} {'above' if gap_q1 >= 0 else 'below'} plan "
-                   f"at the median")
         opening = (f"**Overall outlook — conditioned on {ctx.conditioned_on}.** "
                    f"If this scenario occurs, the plan is {tone}."
                    if ctx.conditioned_on else
@@ -92,8 +93,11 @@ class RulesBasedNarrative(NarrativeProvider):
             f"probability of achieving the quarterly revenue plan at {p_q1:.0%}, the "
             f"full-year plan at {p_fy:.0%}, and the {k['gm_target']:.1%} gross-margin "
             f"target at {p_gm:.0%}. Expected Q1 revenue of "
-            f"{fmt_money(k['q1_revenue']['median'])} is {gap_txt} "
-            f"({fmt_money(k['q1_plan'])}); the credible range (5th-95th percentile) is "
+            f"{fmt_money(k['q1_revenue']['mean'])} is "
+            f"{fmt_money(abs(gap_q1))} {'above' if gap_q1 >= 0 else 'below'} the "
+            f"{fmt_money(k['q1_plan'])} plan; the median outcome is "
+            f"{fmt_money(k['q1_revenue']['median'])} and the credible range "
+            f"(5th-95th percentile) is "
             f"{fmt_money(k['q1_revenue']['p5'])} to {fmt_money(k['q1_revenue']['p95'])}."
         )
         dc = ctx.demand_confidence
