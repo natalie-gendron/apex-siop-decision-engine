@@ -61,7 +61,7 @@ grid:
 | | response = nothing | response = package |
 | --- | --- | --- |
 | **world = base** | the standing outlook | "base vs what we will do" |
-| **world = scenario** | stress/posture, unmitigated | the recommended plan under that world |
+| **world = scenario** | stress/posture, unmitigated | the recommended response under that world |
 
 ### Two kinds of view (the plan-of-record / outcome rule)
 

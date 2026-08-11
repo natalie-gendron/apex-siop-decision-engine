@@ -115,13 +115,13 @@
     <p>The mental model behind the Apex SIOP engine — what each sidebar knob touches, and what it can never touch.</p>
   </header>
 
-  <div class="eq">outcome distribution = Simulate(<b>inputs</b>, <b class="w">world</b>, <b class="r">response</b>) <span style="color: var(--muted)">— judged against the frozen plan</span></div>
+  <div class="eq">outcome distribution = Simulate(<b>inputs</b>, <b class="w">world</b>, <b class="r">response</b>) <span style="color: var(--muted)">— judged against the frozen plan of record</span></div>
 
   <section>
     <h2>1 — What feeds the simulation</h2>
     <figure>
       <div class="fig-scroll">
-      <svg viewBox="0 0 880 390" role="img" aria-label="Three lanes feed the Simulate step: the world (scenario plus demand confidence, beliefs with no cost), the frozen inputs (demand forecast and supply assumptions, never rewritten), and the response (a costed package of actions). Simulate emits an outcome distribution that is read against a dashed plan marker.">
+      <svg viewBox="0 0 880 390" role="img" aria-label="Three lanes feed the Simulate step: the world (scenario plus demand confidence, beliefs with no cost), the frozen inputs (the demand plan — forecast plus firm backlog — and supply assumptions, never rewritten), and the response (a costed package of actions). Simulate emits an outcome distribution that is read against a dashed marker for the frozen plan of record.">
         <defs>
           <marker id="arr-m" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
             <path d="M0 0 L10 5 L0 10 Z" style="fill: var(--muted)"></path>
@@ -147,9 +147,10 @@
 
         <!-- INPUTS -->
         <rect class="box-frozen" x="40" y="196" width="280" height="64" rx="6"></rect>
-        <text class="t-title" x="56" y="218">INPUTS — THE FROZEN PLAN</text>
-        <text class="t-small" x="56" y="237">demand forecast + supply assumptions</text>
-        <text class="t-tag" x="304" y="250" text-anchor="end">locked</text>
+        <text class="t-title" x="56" y="218">INPUTS — FROZEN FOR THE CYCLE</text>
+        <text class="t-small" x="56" y="234">demand plan (forecast + firm backlog)</text>
+        <text class="t-small" x="56" y="249">+ supply assumptions</text>
+        <text class="t-tag" x="304" y="249" text-anchor="end">locked</text>
 
         <!-- RESPONSE -->
         <rect class="box-resp" x="40" y="304" width="280" height="56" rx="8"></rect>
@@ -179,10 +180,10 @@
         <line class="plan-line" x1="800" y1="188" x2="800" y2="280"></line>
         <text class="t-tag" x="800" y="182" text-anchor="middle">plan</text>
         <line class="ghost" x1="650" y1="280" x2="872" y2="280"></line>
-        <text class="t-small" x="660" y="300">read against the plan marker</text>
+        <text class="t-small" x="660" y="300">read against the frozen plan of record</text>
       </svg>
       </div>
-      <figcaption><b>Two of the three lanes are beliefs; one is a decision.</b> Scenario and confidence both live on the world axis and carry no cost — a scenario is a hypothesis you choose, confidence is evidence you assess. Only the response is something the business <i>does</i>, and it is always priced conditional on the world it runs in. The inputs lane is the yardstick: nothing upstream ever edits it.</figcaption>
+      <figcaption><b>Two of the three lanes are beliefs; one is a decision.</b> Scenario and confidence both live on the world axis and carry no cost — a scenario is a hypothesis you choose, confidence is evidence you assess. Only the response is something the business <i>does</i>, and it is always priced conditional on the world it runs in. Nothing ever edits the inputs lane; the <b>plan of record</b> — the commitment derived from those inputs and frozen for the cycle — is the dashed yardstick the outcome is read against.</figcaption>
     </figure>
   </section>
 
@@ -200,7 +201,7 @@
           <text class="t-small" x="240" y="66" text-anchor="end">wide = low confidence</text>
           <text class="t-small" x="235" y="103" text-anchor="end">narrow = high</text>
           <line class="ghost" x1="10" y1="210" x2="270" y2="210"></line>
-          <text class="t-small" x="10" y="232">band widens or narrows — the line never moves</text>
+          <text class="t-small" x="10" y="232">band widens or narrows — the plan line never moves</text>
         </g>
         <!-- Panel B: scenario -->
         <g transform="translate(300, 20)">
@@ -228,7 +229,7 @@
         </g>
       </svg>
       </div>
-      <figcaption><b>The distinction that matters most, drawn.</b> Confidence points <i>at</i> the forecast but operates on the band around it — it never moves the line. A scenario moves the simulated world; the dashed plan stays put because it is what everything is measured against. A response then claws back part of the gap, and unlike the other two knobs, it costs money.</figcaption>
+      <figcaption><b>The distinction that matters most, drawn.</b> Confidence is trust in the <i>forecast</i>, but it acts only on the band — the demand plan is never rewritten, and the dashed plan line never moves. A scenario moves the simulated world; the plan stays put because it is what everything is measured against. A response then claws back part of the gap, and unlike the other two knobs, it costs money.</figcaption>
     </figure>
   </section>
 
@@ -249,7 +250,7 @@
         <tr>
           <th class="w">world = scenario</th>
           <td><b>Stress test, unmitigated</b> — how bad does it get if we do nothing?</td>
-          <td><b>The recommended plan under that world</b> — the package priced where it matters.</td>
+          <td><b>The recommended response under that world</b> — the package priced where it matters.</td>
         </tr>
       </table>
     </div>
