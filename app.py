@@ -678,9 +678,22 @@ with tabs[1]:
                    None if ctx_result is base_result else
                    f"{pd_ctx_curve[m_idx] - pd_base_curve[m_idx]:+.0f} vs base",
                    delta_color="inverse")
+    # the expected queue crests only if supply catches demand + backlog; with
+    # the current calibration unconstrained demand outruns supply in
+    # expectation, so the crest state is rare — until one appears, the
+    # fastest-growth month is the informative number ("when does it bite")
     peak_m = int(pd_ctx_curve.argmax())
-    dcols[3].metric("Peak expected past-due", f"{pd_ctx_curve.max():.0f} systems",
-                    f"in {months[peak_m]}", delta_color="off")
+    if peak_m < len(months) - 1:
+        dcols[3].metric("Peak expected past-due",
+                        f"{pd_ctx_curve.max():.0f} systems",
+                        f"crests in {months[peak_m]}", delta_color="off")
+    else:
+        growth = np.diff(pd_ctx_curve)
+        g_m = int(growth.argmax())
+        dcols[3].metric("Fastest past-due growth",
+                        f"+{growth.max():.0f} systems/mo",
+                        f"in {months[g_m + 1]} — no crest by horizon end",
+                        delta_color="off")
     t1, t2 = st.columns(2)
     t1.plotly_chart(viz.backlog_trajectory_chart(base_result, ctx_result,
                                                  context_label),
