@@ -1,0 +1,6 @@
+# App theme. primaryColor drives primary buttons, focus states and accents —
+# the default Streamlit red reads as an alarm on the orientation button; this
+# is the doc page's "belief" blue, so app accents and the embedded mental
+# model share one palette.
+[theme]
+primaryColor = "#3B6EA8"
