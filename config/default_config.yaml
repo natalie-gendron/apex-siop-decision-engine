@@ -11,7 +11,7 @@ simulation:
   default_mode: standard
 
 financial:
-  gross_margin_target: 0.57         # company GM target
+  gross_margin_target: 0.58         # company GM target
   inventory_target_usd: 600.0e6     # ending-inventory target
   inventory_turns_target: 2.2
   opex_monthly_usd: 68.0e6          # operating expense per month (R&D + SG&A)
