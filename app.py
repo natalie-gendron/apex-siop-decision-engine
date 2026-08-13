@@ -1065,18 +1065,21 @@ with tabs[7]:
             "d_inventory": "Δ year-end inventory",
             "d_working_capital": "Δ year-end working capital",
             "d_expedite": "Δ FY expedite cost", "d_service": "Δ FY service",
-            "d_revenue_at_risk": "FY revenue-at-risk reduced"}
+            "d_revenue_at_risk": "Δ FY revenue at risk"}
         money = {"Δ Q1 revenue", "Δ FY revenue", "Δ FY gross profit",
                  "Δ year-end inventory", "Δ year-end working capital",
-                 "Δ FY expedite cost", "FY revenue-at-risk reduced"}
+                 "Δ FY expedite cost", "Δ FY revenue at risk"}
         pts = {"Δ P(Q1 plan)", "Δ P(FY plan)", "Δ FY gross margin",
                "Δ FY service"}
         # scenarios are exogenous and carry no decision cost by doctrine —
         # the response-axis columns belong to actions, not to a worlds-only
         # table: "Decision cost" is always $0, "Risk reduced per dollar" is
         # always NaN, and at zero cost "incremental EV" is bit-identical to
-        # Δ FY gross profit (a duplicated column under a decision label)
+        # Δ FY gross profit (a duplicated column under a decision label).
+        # The risk delta is quoted in the frame of its axis: worlds ADD risk
+        # (raw Δ, positive = more at risk), responses REDUCE it (the strip).
         disp = (pd.DataFrame(rows).set_index("scenario")
+                .assign(d_revenue_at_risk=lambda d: -d["d_revenue_at_risk"])
                 .drop(columns=["action_cost", "risk_reduced_per_dollar",
                                "incremental_ev"])
                 .rename(columns=col_names))

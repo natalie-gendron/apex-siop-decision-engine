@@ -186,6 +186,12 @@ Executive answer first, then the meeting's supporting flow:
   feeds arrive in V2.
 - **No plan-vs-base toggle.** Both frames are always visible; toggles create
   ambiguous screenshots.
+- **The revenue-at-risk delta is quoted in the frame of its axis**
+  (2026-08-13). Worlds ADD risk: worlds-only surfaces (Scenario Comparison
+  tab and export sheet) show the raw "Δ FY revenue at risk", positive =
+  more at risk. Responses REDUCE it: the response-facing strip shows
+  "FY revenue-at-risk reduced", positive = less. One field, two labeled
+  presentations — the sign always matches the word being read.
 - **Orientation is an overlay, not a tab** (2026-08-13). The first visit in
   a session opens a dismissible "what is this?" dialog, reopenable from the
   sidebar; the tab order keeps the executive answer first. A home tab was
