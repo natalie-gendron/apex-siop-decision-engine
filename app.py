@@ -1045,7 +1045,7 @@ with tabs[7]:
     chosen = st.multiselect(
         "Scenarios to compare against the base case",
         [s for s in scenarios if s != "Base Case"],
-        default=["AI Demand Surge", "Critical FPGA Shortage",
+        default=["AI Surge with Supply Tightening", "Critical FPGA Shortage",
                  "Major Customer Push-Out", "EMS Malaysia Disruption"])
     rows = []
     scen_curves: dict = {}
@@ -1422,7 +1422,7 @@ engine's planned next capability.
     st.divider()
     st.markdown("#### Excel export")
     scenario_rows_all = []
-    for name in ["AI Demand Surge", "Critical FPGA Shortage",
+    for name in ["AI Surge with Supply Tightening", "Critical FPGA Shortage",
                  "Major Customer Push-Out", "EMS Malaysia Disruption",
                  "Memory Recovery Delay"]:
         s = scenarios[name]

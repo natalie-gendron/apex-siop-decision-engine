@@ -155,10 +155,10 @@ to component stock above 2.5 months forward usage plus aged finished goods.
 
 ## Scenarios & recommendations
 
-Eight prebuilt scenarios — exogenous world-states only (base case, AI demand
-surge, memory recovery, memory recovery delay, major customer push-out,
-critical FPGA shortage, EMS Malaysia disruption, customer site-readiness
-delay) — plus a fully custom scenario. Fourteen management actions across
+Eight prebuilt scenarios — exogenous world-states only (base case, AI surge
+with supply tightening, memory recovery, memory recovery delay, major
+customer push-out, critical FPGA shortage, EMS Malaysia disruption, customer
+site-readiness delay) — plus a fully custom scenario. Fourteen management actions across
 three SIOP horizons (Execution / Tactical / Long-lead), combinable into costed
 response packages, are each simulated with **common random numbers** against a
 no-action reference at the same path count and seed so deltas isolate the

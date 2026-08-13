@@ -54,7 +54,7 @@ def test_scenario_changes_outputs(data, config, baseline, base_result):
 
 def test_ai_surge_raises_demand(data, config, baseline, base_result):
     from src.scenarios import prebuilt_scenarios
-    scen = prebuilt_scenarios()["AI Demand Surge"]
+    scen = prebuilt_scenarios()["AI Surge with Supply Tightening"]
     r = run_simulation(data, config, baseline, params=scen.overrides,
                        n_sims=base_result.n_sims, seed=base_result.seed)
     assert (fiscal_year(r.units_demanded).mean()

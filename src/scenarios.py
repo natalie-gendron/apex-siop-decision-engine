@@ -25,7 +25,7 @@ def prebuilt_scenarios() -> dict[str, ScenarioSpec]:
     scenarios = [
         ScenarioSpec("Base Case", "Current SIOP assumptions with no overrides.", {}),
         ScenarioSpec(
-            "AI Demand Surge",
+            "AI Surge with Supply Tightening",
             "AI / HPC demand runs 25% above plan; select customers pull in orders; "
             "FPGA and high-speed interconnect supply tightens.",
             {"demand_market_mult": {"AI / HPC": 1.25},
