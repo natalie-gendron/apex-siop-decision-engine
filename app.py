@@ -964,12 +964,27 @@ with tabs[5]:
         "FY cash-flow proxy": ctx_result.cash_flow[:, :12].sum(axis=1),
     }
     pick = st.selectbox("Distribution", list(fy_map))
-    ref = baseline.revenue_plan_q[:4].sum() if pick == "FY revenue" else \
-        float(np.median(fy_map[pick]))
+    fy_plan_rev = float(baseline.revenue_plan_q[:4].sum())
+    if pick == "FY revenue":
+        ref, ref_label = fy_plan_rev, "Plan"
+    elif pick == "FY gross profit":
+        # the two signed commitments express a gross-profit plan:
+        # plan revenue at the target margin
+        ref = fy_plan_rev * CONFIG.financial.gross_margin_target
+        ref_label = "Plan (revenue plan × GM target)"
+    else:
+        ref, ref_label = float(np.median(fy_map[pick])), "Median"
     st.plotly_chart(viz.distribution_with_target(
         fy_map[pick], ref, f"{pick} distribution{ctx_suffix}", f"{pick} ($)",
-        target_label="Plan" if pick == "FY revenue" else "Median"),
+        target_label=ref_label),
         width='stretch')
+    st.caption("Reference lines: revenue is judged against the plan of "
+               "record; gross profit against the same commitment expressed "
+               "in dollars (revenue plan × the gross-margin target). "
+               "Operating income, EBITDA and cash flow carry no plan line "
+               "deliberately — below the margin line there is no authored "
+               "commitment, so the median is drawn as an anchor, not a "
+               "target.")
     st.plotly_chart(viz.inventory_trajectory(
         ctx_result, CONFIG.financial.inventory_target_usd, ctx_suffix),
         width='stretch')
