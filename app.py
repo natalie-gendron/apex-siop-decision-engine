@@ -1352,7 +1352,8 @@ app supports one of those questions.
     # iframe, prefers-color-scheme reports the OS setting, not the app's.
     _guide_html = (Path(__file__).parent / "docs"
                    / "mental-model.html").read_text(encoding="utf-8")
-    st.iframe(f'<!doctype html><html data-theme="{st.context.theme.type}">'
+    st.iframe(f'<!doctype html>'
+              f'<html data-theme="{st.context.theme.type}" data-embed="app">'
               f'<head><meta charset="utf-8"></head>'
               f'<body>{_guide_html}</body></html>')
     st.markdown(

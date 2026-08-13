@@ -99,7 +99,7 @@
   .fan-r { fill: var(--decision-soft); }
   .curve { stroke: var(--ink); stroke-width: 1.6; fill: var(--belief-soft); }
 
-  .matrix { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
+  .matrix { border-collapse: collapse; width: 100%; min-width: 640px; font-size: 0.9rem; }
   .matrix th, .matrix td { border: 1px solid var(--line); padding: 0.65rem 0.8rem; text-align: left; vertical-align: top; }
   .matrix th { font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); font-weight: 600; background: var(--surface); }
   .matrix th.w { color: var(--belief); }
@@ -108,6 +108,15 @@
   .matrix td b { font-weight: 600; }
   .matrix-note { margin-top: 0.6rem; font-size: 0.88rem; color: var(--muted); max-width: 65ch; }
   .tbl-scroll { overflow-x: auto; }
+  /* narrow screens: tighten the frame; tables scroll sideways (min-width
+     above) instead of crushing into one-word columns */
+  @media (max-width: 640px) {
+    body { padding: 1.5rem 1rem 2rem; }
+    main { gap: 1.75rem; }
+  }
+  /* embedded in the app (wrapper stamps data-embed): let the app's own
+     background show through instead of painting a big gray panel */
+  html[data-embed] body { background: transparent; }
 </style>
 
 <main>
