@@ -183,7 +183,8 @@ def cached_actions(data_seed: int, sim_seed: int, n_sims: int,
 
 st.sidebar.title("Apex SIOP Engine")
 st.sidebar.caption("Synthetic executive prototype — Apex Test Systems (fictional)")
-if st.sidebar.button("What is this? — 60-second orientation", width='stretch'):
+if st.sidebar.button("What is this? — 60-second orientation",
+                     type="primary", icon=":material/help:", width='stretch'):
     _welcome()
 if not st.session_state.get("welcome_seen"):
     st.session_state["welcome_seen"] = True
