@@ -71,6 +71,9 @@ def fmt_money(x: float, decimals: int = 1) -> str:
     m = x / 1e6
     if abs(m) >= 1000:
         return f"${m / 1000:,.2f}B"
+    m = round(m, decimals)
+    if m == 0:
+        m = 0.0   # never render "$-0.0M"
     return f"${m:,.{decimals}f}M"
 
 

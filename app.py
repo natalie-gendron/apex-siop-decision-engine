@@ -393,7 +393,9 @@ package_label = (f"response package ({len(package_specs)} "
                  f"action{'s' if len(package_specs) != 1 else ''})")
 
 base_result = sim_with_confidence(n_sims, "Base Case", {})
-world_result = (base_result if spec.name == "Base Case" else
+# a Custom Scenario with every slider untouched IS the base case — treat it
+# so (no duplicate simulation, no "conditioned on" banner for a null context)
+world_result = (base_result if not spec.overrides else
                 sim_with_confidence(n_sims, spec.name, spec.overrides))
 if package_specs:
     context_label = ((f"{spec.name} + " if spec.name != "Base Case" else "")
@@ -1050,19 +1052,20 @@ with tabs[7]:
             "d_inventory": "Δ year-end inventory",
             "d_working_capital": "Δ year-end working capital",
             "d_expedite": "Δ FY expedite cost", "d_service": "Δ FY service",
-            "d_revenue_at_risk": "FY revenue-at-risk reduced",
-            "incremental_ev": "FY incremental EV"}
+            "d_revenue_at_risk": "FY revenue-at-risk reduced"}
         money = {"Δ Q1 revenue", "Δ FY revenue", "Δ FY gross profit",
                  "Δ year-end inventory", "Δ year-end working capital",
-                 "Δ FY expedite cost", "FY revenue-at-risk reduced",
-                 "FY incremental EV"}
+                 "Δ FY expedite cost", "FY revenue-at-risk reduced"}
         pts = {"Δ P(Q1 plan)", "Δ P(FY plan)", "Δ FY gross margin",
                "Δ FY service"}
         # scenarios are exogenous and carry no decision cost by doctrine —
-        # the response-axis columns (a $0 "Decision cost", a NaN "Risk
-        # reduced per dollar") belong to actions, not to a worlds-only table
+        # the response-axis columns belong to actions, not to a worlds-only
+        # table: "Decision cost" is always $0, "Risk reduced per dollar" is
+        # always NaN, and at zero cost "incremental EV" is bit-identical to
+        # Δ FY gross profit (a duplicated column under a decision label)
         disp = (pd.DataFrame(rows).set_index("scenario")
-                .drop(columns=["action_cost", "risk_reduced_per_dollar"])
+                .drop(columns=["action_cost", "risk_reduced_per_dollar",
+                               "incremental_ev"])
                 .rename(columns=col_names))
         st.dataframe(disp.style.format(
             {**{c: (lambda v: fmt_money(v)) for c in money},
@@ -1088,7 +1091,7 @@ with tabs[8]:
     # no page-local world selector (that would be a second source of truth).
     # Under a scenario, the base-world EV stays visible as a comparison
     # column: both frames at once, never toggled.
-    conditioned = spec.name != "Base Case"
+    conditioned = bool(spec.overrides)
     if conditioned:
         # priced at effective_level — the same confidence backdrop as every
         # other simulation (the sidebar override applies to action pricing
@@ -1180,7 +1183,9 @@ with tabs[8]:
             "Cost ($M)": st.column_config.NumberColumn(format="%.1f"),
         },
         width='stretch')
-    ref_label = f"the {spec.name} scenario" if conditioned else "the base case"
+    ref_label = (f"the {spec.name}"
+                 + ("" if spec.name.endswith("Scenario") else " scenario")
+                 if conditioned else "the base case")
     st.caption(f"Every delta is action-versus-{ref_label} on identical simulated "
                "futures (common random numbers) at matched path counts — the "
                f"action and its reference both run at {min(n_sims, 2000):,} "
@@ -1189,9 +1194,10 @@ with tabs[8]:
                "path count.) All deltas and 'Incremental EV' are measured "
                "over the fiscal-year window (first 12 months) — the window "
                "the plan is judged on; 'EV full horizon' is the same net EV "
-               "over all 18 months, so long-lead actions whose benefits land "
-               "in months 13-18 aren't structurally buried. Two labeled "
-               "frames, deliberately not toggled; ranking uses the FY frame. "
+               "over all 18 months, showing where an action's economics "
+               "extend beyond the FY window — in either direction. Two "
+               "labeled frames, deliberately not toggled; ranking uses the "
+               "FY frame. "
                "Each action carries a SIOP horizon (Execution 0-3 mo / "
                "Tactical 1-3 qtrs / Long-lead 6-18 mo) and a realistic "
                "effective-month latency, so long-lead actions show little or "
@@ -1200,6 +1206,10 @@ with tabs[8]:
                "Materiality gates: EV > −\\$1M and (ΔP ≥ 1pt or EV ≥ \\$2M).")
     st.markdown("#### Ranked recommendations"
                 + (f" — if {spec.name} occurs" if conditioned else ""))
+    st.caption("Ranked by composite score — EV 35%, probability 30%, "
+               "revenue 20%, cash use −15% — not by EV alone, so a "
+               "lower-ranked action can carry a higher EV than the one "
+               "above it.")
     if conditioned:
         world_binding = (binding if world_result is base_result else
                          binding_components(world_result))

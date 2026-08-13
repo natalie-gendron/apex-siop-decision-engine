@@ -152,9 +152,13 @@ def build_excel_export(
             ws.cell(row=4 + i, column=2).number_format = fmt
         ws.column_dimensions["A"].width = 38
 
-        # 3. Scenario comparison
+        # 3. Scenario comparison — worlds only: the response-axis columns
+        # (always-$0 cost, always-NaN ratio, EV duplicating Δ gross profit at
+        # zero cost) are dropped here exactly as they are on-screen
         if scenario_rows:
-            sc = pd.DataFrame(scenario_rows)
+            sc = pd.DataFrame(scenario_rows).drop(
+                columns=["action_cost", "risk_reduced_per_dollar",
+                         "incremental_ev"])
             sc = sc.rename(columns={
                 "scenario": "Scenario", "d_q1_revenue": "Δ Q1 revenue",
                 "d_fy_revenue": "Δ FY revenue", "d_p_q1_plan": "Δ P(Q1 plan)",
@@ -164,15 +168,12 @@ def build_excel_export(
                 "d_service": "Δ service level",
                 # sign-flipped in compare_scenarios: positive = risk REDUCED —
                 # the label must match the app's, not read as a raw delta
-                "d_revenue_at_risk": "FY revenue-at-risk reduced",
-                "action_cost": "Action cost", "incremental_ev": "Incremental EV",
-                "risk_reduced_per_dollar": "Risk reduced per $"})
+                "d_revenue_at_risk": "FY revenue-at-risk reduced"})
             _write_df(writer, "Scenario Comparison", sc,
                       "Scenario deltas versus base case",
                       money_cols=("Δ Q1 revenue", "Δ FY revenue", "Δ gross profit",
                                   "Δ inventory", "Δ working capital", "Δ expedite",
-                                  "FY revenue-at-risk reduced", "Action cost",
-                                  "Incremental EV"),
+                                  "FY revenue-at-risk reduced"),
                       pct_cols=("Δ P(Q1 plan)", "Δ P(FY plan)", "Δ FY GM",
                                 "Δ service level"))
 
