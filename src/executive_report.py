@@ -132,11 +132,14 @@ class RulesBasedNarrative(NarrativeProvider):
             f"percentile, concentrated in {fam_txt}."
         ]
         if k["p_gm_target"] < 0.6:
+            gap = k["fy_gm"]["mean"] - k["gm_target"]
+            gap_txt = (f"a cushion of only {100 * gap:.1f} pts" if gap >= 0
+                       else f"a shortfall of {100 * -gap:.1f} pts")
             sentences.append(
-                f"Gross margin is expected at {k['fy_gm']['mean']:.1%} against the "
-                f"{k['gm_target']:.1%} target; expedite premiums "
-                f"({fmt_money(k['expedite_cost']['mean'])} expected for the year) and "
-                f"rework are the main cost-side pressures.")
+                f"Gross margin is expected at {k['fy_gm']['mean']:.1%} against "
+                f"the {k['gm_target']:.1%} target — {gap_txt} — so ordinary "
+                f"cost variance (material PPV and FX, freight, rework) decides "
+                f"attainment.")
         else:
             sentences.append(
                 f"Gross margin is expected at {k['fy_gm']['mean']:.1%}, comfortably "
