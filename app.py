@@ -60,6 +60,40 @@ SIM_MODES = {"Quick (1,000)": 1000, "Standard (5,000)": 5000,
              "Detailed (10,000)": 10000}
 
 
+def md(text: str) -> str:
+    """Escape $ so Streamlit's markdown doesn't render dollar amounts as LaTeX."""
+    return text.replace("$", "\\$")
+
+
+@st.dialog("Apex SIOP Decision Engine — what is this?")
+def _welcome() -> None:
+    """First-visit orientation. An overlay, not a tab, by design: the tab
+    order keeps the executive answer first (see ARCHITECTURE.md)."""
+    st.markdown(md(
+        "A working prototype of **executive decision support for the monthly "
+        "SIOP meeting** of Apex Test Systems — a fictional $2.6B "
+        "semiconductor test-equipment maker. All data is synthetic; nothing "
+        "comes from any real company.\n\n"
+        "One equation drives every page:\n\n"
+        "> **outcome distribution = Simulate(inputs, world, response)** — "
+        "judged against a frozen **plan of record**\n\n"
+        "**Where to begin:**\n"
+        "1. The **Executive Overview** tab answers the meeting's question — "
+        "*do we make the plan?* — as probabilities and ranges, not single "
+        "numbers.\n"
+        "2. The **sidebar** sets the evaluation context: pick a **scenario** "
+        "(what could happen *to* the business) and a **response package** "
+        "(what we would *do* about it). Every page reprices to match.\n"
+        "3. The **Guide, Methodology & Export** tab (last) holds the full "
+        "mental model, the SIOP process guide, and the Excel readout.\n\n"
+        "The tabs follow the meeting's own flow: executive answer, then "
+        "demand review, supply review, financial reconciliation, and "
+        "decision support."))
+    st.caption("Reopen this any time from the sidebar.")
+    if st.button("Start exploring", type="primary"):
+        st.rerun()
+
+
 # ---------------------------------------------------------------------------
 # Cached pipeline
 # ---------------------------------------------------------------------------
@@ -149,6 +183,11 @@ def cached_actions(data_seed: int, sim_seed: int, n_sims: int,
 
 st.sidebar.title("Apex SIOP Engine")
 st.sidebar.caption("Synthetic executive prototype — Apex Test Systems (fictional)")
+if st.sidebar.button("What is this? — 60-second orientation", width='stretch'):
+    _welcome()
+if not st.session_state.get("welcome_seen"):
+    st.session_state["welcome_seen"] = True
+    _welcome()
 
 data_seed = int(st.sidebar.number_input(
     "Input data seed", 1, 10_000, CONFIG.random_seed,
@@ -428,11 +467,6 @@ else:
 # ---------------------------------------------------------------------------
 # Header + tabs
 # ---------------------------------------------------------------------------
-
-def md(text: str) -> str:
-    """Escape $ so Streamlit's markdown doesn't render dollar amounts as LaTeX."""
-    return text.replace("$", "\\$")
-
 
 st.title("Apex Test Systems — SIOP Risk & Scenario Engine")
 st.caption(f"18-month horizon from 2026-07 · scenario: **{spec.name}** · "

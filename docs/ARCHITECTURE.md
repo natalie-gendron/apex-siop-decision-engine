@@ -186,6 +186,11 @@ Executive answer first, then the meeting's supporting flow:
   feeds arrive in V2.
 - **No plan-vs-base toggle.** Both frames are always visible; toggles create
   ambiguous screenshots.
+- **Orientation is an overlay, not a tab** (2026-08-13). The first visit in
+  a session opens a dismissible "what is this?" dialog, reopenable from the
+  sidebar; the tab order keeps the executive answer first. A home tab was
+  considered and rejected — it would demote the Executive Overview and
+  duplicate the Guide tab.
 - **Recommendations price actions in a *world*, never in a context that
   already contains a package** (marginal-value-on-top-of-package is a
   possible future refinement, priced explicitly if ever added). The world is
