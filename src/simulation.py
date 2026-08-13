@@ -187,22 +187,39 @@ def run_simulation(data: InputData, config: AppConfig, baseline: BaselineResult,
     received[:, 1:, :] += (receipts_nominal * delay_frac)[:, :-1, :]
     received = received * np.where(disrupted, 0.35, 1.0)
 
-    # expediting recovers part of delayed receipts at a premium
+    # Expediting recovers part of delayed receipts at a premium — but only
+    # where the receipts are NEEDED: units are expedited up to the projected
+    # cumulative shortfall against the demand plan's component requirement
+    # to date (the planner's view when the broker is paid — requested dates,
+    # not realized shipments). The recovery fractions cap how much of the
+    # delayed pool CAN be recovered; need caps how much IS.
+    # (A volume-based premium on every late PO priced the standing policy as
+    # ~$28M/yr of waste in the base world, made "stop expediting" free money,
+    # and taxed every receipts-adding action with premium on its own delayed
+    # pool — 2026-08 audit finding.)
     delayed_pool = receipts_nominal * delay_frac + receipts_nominal * np.where(disrupted, 0.65, 0.0)
     recovery_vec = np.full(n_c, float(p["expedite_recovery"]))
     for comp, frac in p["expedite_recovery_by_comp"].items():
         recovery_vec[pa.comp_names.index(comp)] = float(frac)
-    recovery = recovery_vec[None, None, :] * np.where(
-        pa.comp_expedite_ok[None, None, :], 1.0, 0.0)
-    recovered = delayed_pool * recovery
+    recovery = recovery_vec * np.where(pa.comp_expedite_ok, 1.0, 0.0)   # (C,)
+    # safety stock is usable in a pinch: only a fraction is treated as a hard
+    # floor; the policy level mainly shows up in average raw-material inventory
+    safety_floor = pa.comp_safety * p["safety_stock_mult"] * 0.3
+    start_avail = np.clip(pa.comp_on_hand - safety_floor, 0, None)      # (C,)
+    cum_req = np.cumsum(np.einsum("nmf,cf->nmc", demand, pa.comp_usage), axis=1)
+    recovered = np.zeros_like(received)
+    cum_supply = np.tile(start_avail[None, :], (n_sims, 1))             # (n, C)
+    for m in range(M):
+        cum_supply = cum_supply + received[:, m, :]
+        need = np.clip(cum_req[:, m, :] - cum_supply, 0, None)
+        recovered[:, m, :] = np.minimum(delayed_pool[:, m, :] * recovery[None, :],
+                                        need)
+        cum_supply = cum_supply + recovered[:, m, :]
     received = received + recovered
     expedite_cost_comp = (recovered * pa.comp_cost[None, None, :]
                           * pa.comp_expedite_prem[None, None, :]
                           * p["expedite_premium_mult"]).sum(axis=2)   # (n, M)
 
-    # safety stock is usable in a pinch: only a fraction is treated as a hard
-    # floor; the policy level mainly shows up in average raw-material inventory
-    safety_floor = pa.comp_safety * p["safety_stock_mult"] * 0.3
     comp_avail = np.clip(pa.comp_on_hand[None, None, :] - safety_floor[None, None, :], 0, None) \
         + np.cumsum(received, axis=1)                                  # usable cumulative supply
 

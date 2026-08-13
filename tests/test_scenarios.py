@@ -130,23 +130,36 @@ def test_response_package_stacks_actions(data, config, baseline):
 
 
 def test_targeted_expedite_recovery(data, config, baseline):
-    """Per-component expedite recovery must change outcomes for the targeted
-    component only, at far lower expedite cost than blanket expediting."""
-    base = run_simulation(data, config, baseline, n_sims=800, seed=5)
+    """Per-component expedite recovery raises a CAP; since expediting is
+    need-conditional, the cap only costs money in a world with a shortfall
+    to cover — and blanket coverage costs more than targeted coverage there."""
+    from src.scenarios import prebuilt_scenarios
+    shortage = prebuilt_scenarios()["Critical FPGA Shortage"].overrides
+    base = run_simulation(data, config, baseline, params=shortage,
+                          n_sims=800, seed=5)
     targeted = run_simulation(
         data, config, baseline,
-        params={"expedite_recovery_by_comp": {"High-End FPGA": 0.9}},
+        params={**shortage,
+                "expedite_recovery_by_comp": {"High-End FPGA": 0.9}},
         n_sims=800, seed=5)
     blanket = run_simulation(
-        data, config, baseline, params={"expedite_recovery": 0.9},
+        data, config, baseline,
+        params={**shortage, "expedite_recovery": 0.9},
         n_sims=800, seed=5)
     base_cost = fiscal_year(base.expedite_cost).mean()
     targeted_cost = fiscal_year(targeted.expedite_cost).mean()
     blanket_cost = fiscal_year(blanket.expedite_cost).mean()
-    assert targeted_cost > base_cost          # targeting one part costs something
-    # blanket must cost meaningfully more than targeting (the FPGA alone is the
-    # priciest expedite, so the gap is real but not enormous)
-    assert blanket_cost > targeted_cost * 1.2
+    assert targeted_cost > base_cost   # covering the short part costs money
+    assert blanket_cost > targeted_cost  # covering every short part costs more
     # targeting must not reduce shipments
     assert (fiscal_year(targeted.units_shipped).mean()
             >= fiscal_year(base.units_shipped).mean() - 0.5)
+    # and in the calm base world, raising the FPGA cap is ~free — spend is
+    # sized by need, not by the cap (the point of need-conditionality)
+    calm = run_simulation(data, config, baseline, n_sims=800, seed=5)
+    calm_targeted = run_simulation(
+        data, config, baseline,
+        params={"expedite_recovery_by_comp": {"High-End FPGA": 0.9}},
+        n_sims=800, seed=5)
+    assert (fiscal_year(calm_targeted.expedite_cost).mean()
+            <= fiscal_year(calm.expedite_cost).mean() + 1e6)
