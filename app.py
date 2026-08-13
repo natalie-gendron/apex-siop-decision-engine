@@ -65,6 +65,13 @@ def md(text: str) -> str:
     return text.replace("$", "\\$")
 
 
+def chart(fig, *args, where=None, **kwargs):
+    """Render a figure with the app's shared chart options — see
+    visualizations.PLOTLY_CONFIG (trimmed hover toolbar, so its icons never
+    crowd a title). `where` targets a column or container."""
+    (where or st).plotly_chart(fig, *args, config=viz.PLOTLY_CONFIG, **kwargs)
+
+
 @st.dialog("Apex SIOP Decision Engine — what is this?")
 def _welcome() -> None:
     """First-visit orientation. An overlay, not a tab, by design: the tab
@@ -593,12 +600,12 @@ with tabs[0]:
             # r2[3] blank without a package; r2[4] always blank
         pkg_stage = package_label if package_specs else None
         b1, b2 = st.columns(2)
-        b1.plotly_chart(viz.context_bridge(base_kpi, world_kpi, ctx_kpi,
-                                           spec.name, pkg_stage, "revenue"),
-                        width='stretch', key="bridge_revenue")
-        b2.plotly_chart(viz.context_bridge(base_kpi, world_kpi, ctx_kpi,
-                                           spec.name, pkg_stage, "margin"),
-                        width='stretch', key="bridge_margin")
+        chart(viz.context_bridge(base_kpi, world_kpi, ctx_kpi,
+                                 spec.name, pkg_stage, "revenue"),
+              where=b1, width='stretch', key="bridge_revenue")
+        chart(viz.context_bridge(base_kpi, world_kpi, ctx_kpi,
+                                 spec.name, pkg_stage, "margin"),
+              where=b2, width='stretch', key="bridge_margin")
         if package_specs:
             st.caption("Read the bridges together: a response can recover "
                        "revenue while paying margin for it (expedite premiums "
@@ -646,19 +653,19 @@ with tabs[0]:
     from src.simulation import quarterly
     g1, g2 = st.columns(2)
     with g1:
-        st.plotly_chart(viz.distribution_with_target(
+        chart(viz.distribution_with_target(
             quarterly(ctx_result.revenue)[:, 0], k["q1_plan"],
-            f"Q1 revenue distribution vs plan{ctx_suffix}", "Q1 revenue ($)"),
+            f"Q1 revenue vs plan{ctx_suffix}", "Q1 revenue ($)"),
             width='stretch')
     with g2:
         fy_rev = ctx_result.revenue[:, :12].sum(axis=1)
         fy_gm = np.where(fy_rev > 0,
                          ctx_result.gross_profit[:, :12].sum(axis=1) / fy_rev, 0)
-        st.plotly_chart(viz.distribution_with_target(
+        chart(viz.distribution_with_target(
             fy_gm, CONFIG.financial.gross_margin_target,
-            f"FY gross-margin distribution vs target{ctx_suffix}", "Gross margin",
+            f"FY gross margin vs target{ctx_suffix}", "Gross margin",
             value_fmt="pct", target_label="Target"), width='stretch')
-    st.plotly_chart(viz.quarterly_fan_chart(ctx_result, baseline.revenue_plan_q,
+    chart(viz.quarterly_fan_chart(ctx_result, baseline.revenue_plan_q,
                                             ctx_suffix),
                     width='stretch')
 
@@ -672,22 +679,24 @@ with tabs[1]:
     # one tile per clock (Q1 / FY / horizon); the trajectory chart below
     # carries the shape story (where the queue steepens, or crests if a
     # context ever produces one)
+    # unit in the shared heading, not in each value — "158 systems" truncates
+    # to "158 sys…" in a narrow column on a tablet or phone
+    st.markdown("**Expected past-due backlog — systems**")
     dcols = st.columns(3)
     for col, label, m_idx in [
-            (dcols[0], "Expected past-due at Q1 end", 2),
-            (dcols[1], "Expected past-due at FY end", 11),
-            (dcols[2], "Expected past-due at horizon end", 17)]:
-        col.metric(label, f"{pd_ctx_curve[m_idx]:.0f} systems",
+            (dcols[0], "At Q1 end", 2),
+            (dcols[1], "At FY end", 11),
+            (dcols[2], "At horizon end", 17)]:
+        col.metric(label, f"{pd_ctx_curve[m_idx]:.0f}",
                    None if ctx_result is base_result else
                    f"{pd_ctx_curve[m_idx] - pd_base_curve[m_idx]:+.0f} vs base",
                    delta_color="inverse")
     t1, t2 = st.columns(2)
-    t1.plotly_chart(viz.backlog_trajectory_chart(base_result, ctx_result,
-                                                 context_label),
-                    width='stretch', key="delinquency_trajectory")
-    t2.plotly_chart(viz.past_due_family_chart(
+    chart(viz.backlog_trajectory_chart(base_result, ctx_result, context_label),
+          where=t1, width='stretch', key="delinquency_trajectory")
+    chart(viz.past_due_family_chart(
         expected_past_due_by_family(ctx_result), ctx_suffix),
-        width='stretch', key="delinquency_family")
+        where=t2, width='stretch', key="delinquency_family")
     st.caption("Past-due backlog = cumulative demand minus cumulative "
                "shipments across simulated futures, floored at zero "
                "(expected value; band = P25-P75 of the conditioned outlook). "
@@ -708,7 +717,7 @@ with tabs[1]:
     pivot = dem.pivot_table(index=["customer", "product_family"], columns="month",
                             values="units", aggfunc="sum").fillna(0).astype(int)
     st.dataframe(pivot, width='stretch', height=420)
-    st.plotly_chart(viz.backlog_aging_chart(baseline), width='stretch')
+    chart(viz.backlog_aging_chart(baseline), width='stretch')
 
 # --------------- 3. Market Intelligence & Demand Confidence ----------------
 with tabs[2]:
@@ -749,7 +758,7 @@ with tabs[2]:
     with st.expander("Signal detail — trailing 12 months"):
         pick_sig = st.selectbox("Signal", [s.name for s in dc.signals])
         s = next(x for x in dc.signals if x.name == pick_sig)
-        st.plotly_chart(viz.signal_history_chart(s.name, s.history, s.unit),
+        chart(viz.signal_history_chart(s.name, s.history, s.unit),
                         width='stretch')
         st.dataframe(pd.DataFrame([{
             "Signal": x.name, "Current": x.current, "Unit": x.unit,
@@ -868,7 +877,7 @@ with tabs[2]:
             "Cash flow": r.cash_flow[:, :12].sum(axis=1).mean(),
         })
     sens_df = pd.DataFrame(sens_rows)
-    st.plotly_chart(viz.confidence_sensitivity_chart(sens_df, effective_level),
+    chart(viz.confidence_sensitivity_chart(sens_df, effective_level),
                     width='stretch')
     disp = sens_df.assign(**{
         "FY revenue (mean)": sens_df["mean"], "FY revenue (P5)": sens_df["p5"],
@@ -904,7 +913,7 @@ with tabs[3]:
         st.caption(f"Showing supply risk under **{context_label}**. Select "
                    "Base Case (and clear the package) for the standing risk "
                    "picture.")
-    st.plotly_chart(viz.component_risk_heatmap(data.components, ctx_binding),
+    chart(viz.component_risk_heatmap(data.components, ctx_binding),
                     width='stretch')
     c1, c2 = st.columns(2)
     with c1:
@@ -938,14 +947,14 @@ with tabs[4]:
         st.caption(f"Showing capacity utilization under **{context_label}**. "
                    "Select Base Case (and clear the package) for the standing "
                    "picture.")
-    st.plotly_chart(viz.utilization_heatmap(ctx_result, ctx_suffix),
+    chart(viz.utilization_heatmap(ctx_result, ctx_suffix),
                     width='stretch')
     st.divider()
     st.caption("Everything below is the plan-of-record baseline — "
                "deterministic site loading and capacity vs demand; it never "
                "moves with the sidebar.")
-    st.plotly_chart(viz.site_utilization_heatmap(baseline), width='stretch')
-    st.plotly_chart(viz.ems_capacity_vs_demand(baseline), width='stretch')
+    chart(viz.site_utilization_heatmap(baseline), width='stretch')
+    chart(viz.ems_capacity_vs_demand(baseline), width='stretch')
     st.markdown("#### Baseline constraint log")
     st.dataframe(baseline.constraints, width='stretch', height=260)
 
@@ -974,7 +983,7 @@ with tabs[5]:
         ref_label = "Plan (revenue plan × GM target)"
     else:
         ref, ref_label = float(np.median(fy_map[pick])), "Median"
-    st.plotly_chart(viz.distribution_with_target(
+    chart(viz.distribution_with_target(
         fy_map[pick], ref, f"{pick} distribution{ctx_suffix}", f"{pick} ($)",
         target_label=ref_label),
         width='stretch')
@@ -985,7 +994,7 @@ with tabs[5]:
                "deliberately — below the margin line there is no authored "
                "commitment, so the median is drawn as an anchor, not a "
                "target.")
-    st.plotly_chart(viz.inventory_trajectory(
+    chart(viz.inventory_trajectory(
         ctx_result, CONFIG.financial.inventory_target_usd, ctx_suffix),
         width='stretch')
     st.markdown(f"#### FY distribution statistics{ctx_suffix}")
@@ -1019,14 +1028,14 @@ with tabs[6]:
                    "Base Case (and clear the package) for the standing risk "
                    "picture.")
     outcome = st.selectbox("Outcome to explain", list(ctx_rankings))
-    st.plotly_chart(viz.tornado_chart(ctx_rankings[outcome],
+    chart(viz.tornado_chart(ctx_rankings[outcome],
                                       outcome + ctx_suffix),
                     width='stretch')
     c1, c2 = st.columns(2)
     with c1:
-        st.plotly_chart(viz.family_risk_chart(ctx_fam_risk), width='stretch')
+        chart(viz.family_risk_chart(ctx_fam_risk), width='stretch')
     with c2:
-        st.plotly_chart(viz.risk_matrix(ctx_fam_risk, ctx_kpi), width='stretch')
+        chart(viz.risk_matrix(ctx_fam_risk, ctx_kpi), width='stretch')
     c3, c4 = st.columns(2)
     with c3:
         st.markdown(f"#### Months with greatest capacity risk{ctx_suffix}")
@@ -1058,7 +1067,7 @@ with tabs[7]:
                                       s.action_cost_usd))
         scen_curves[name] = expected_past_due_curve(r)
     if rows:
-        st.plotly_chart(viz.scenario_comparison_chart(rows), width='stretch')
+        chart(viz.scenario_comparison_chart(rows), width='stretch')
         col_names = {
             "d_q1_revenue": "Δ Q1 revenue", "d_fy_revenue": "Δ FY revenue",
             "d_p_q1_plan": "Δ P(Q1 plan)", "d_p_fy_plan": "Δ P(FY plan)",
@@ -1089,10 +1098,10 @@ with tabs[7]:
             {**{c: (lambda v: fmt_money(v)) for c in money},
              **{c: (lambda v: fmt_pts(v)) for c in pts}}), width='stretch')
     if world_result is not base_result:
-        st.plotly_chart(viz.revenue_bridge(base_kpi, world_kpi),
+        chart(viz.revenue_bridge(base_kpi, world_kpi),
                         width='stretch')
     if scen_curves:
-        st.plotly_chart(viz.backlog_comparison_chart(pd_base_curve,
+        chart(viz.backlog_comparison_chart(pd_base_curve,
                                                      scen_curves),
                         width='stretch', key="scen_cmp_trajectory")
         st.caption("Expected past-due backlog = cumulative demand minus "

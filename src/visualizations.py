@@ -33,17 +33,64 @@ BASELINE_C = "#c3c2b7"
 SURFACE = "#fcfcfb"
 
 
+# Shared chart display options: only the Plotly wordmark is dropped. The
+# toolbar (fullscreen, zoom, pan, save image) stays — title wrapping below
+# is what keeps the icons off the text.
+PLOTLY_CONFIG = {"displaylogo": False}
+
+TITLE_WRAP = 56        # long-title fallback
+NARROW_TITLE = 34      # characters that fit one line of a two-column chart
+
+
+def _wrap_title(title: str, width: int = TITLE_WRAP) -> str:
+    """Break a long title so the hover toolbar (top-right) never lands on it.
+
+    The measure stays on line one; whatever qualifies it — a context suffix
+    (" — EMS Malaysia Disruption + response package") or a trailing
+    parenthetical ("(18-month horizon)") — drops to a second, quieter line.
+    Breaks never land inside parentheses."""
+    def two_lines(head: str, tail: str) -> str:
+        return (f"{head.strip()}<br>"
+                f"<span style=\"font-size:12px;color:{MUTED}\">"
+                f"{tail.strip()}</span>")
+
+    depth = 0
+    for i, ch in enumerate(title):
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+        elif depth == 0 and title.startswith(" — ", i):
+            return two_lines(title[:i], title[i + 3:])
+    # a trailing parenthetical is a qualifier: drop it to line two as soon as
+    # the title is longer than a narrow column fits, not just when it is long
+    cut = title.rfind(" (")
+    if cut > 0 and len(title) > NARROW_TITLE:
+        return two_lines(title[:cut], title[cut:])
+    if len(title) <= width:
+        return title
+    cut = title.rfind(" ", 0, width)
+    return two_lines(title[:cut], title[cut:]) if cut > 0 else title
+
+
 def _layout(fig: go.Figure, title: str, xtitle: str = "", ytitle: str = "",
             height: int = 380, legend: bool = True) -> go.Figure:
     fig.update_layout(
-        title=dict(text=title, font=dict(size=15, color=INK)),
+        # automargin reserves room for however many lines the title takes, so
+        # a wrapped title pushes the plot down instead of colliding with it
+        title=dict(text=_wrap_title(title), font=dict(size=15, color=INK),
+                   yref="container", y=1.0, yanchor="top", pad=dict(t=14),
+                   automargin=True),
         font=dict(family='system-ui, -apple-system, "Segoe UI", sans-serif',
                   size=12, color=INK2),
         paper_bgcolor=SURFACE, plot_bgcolor=SURFACE,
-        height=height, margin=dict(l=60, r=24, t=54, b=44),
+        height=height, margin=dict(l=60, r=24, t=58, b=70),
         showlegend=legend,
-        legend=dict(orientation="h", yanchor="bottom", y=1.0, xanchor="right", x=1,
-                    font=dict(size=11)),
+        # legend below the plot: at the top it competes with the title and
+        # the hover toolbar, and in a narrow column (two charts side by side
+        # on a tablet) it lands on top of them
+        legend=dict(orientation="h", yanchor="top", y=-0.18, xanchor="left",
+                    x=0, font=dict(size=11)),
         hoverlabel=dict(bgcolor="white", font=dict(size=12, color=INK)),
     )
     fig.update_xaxes(title_text=xtitle, showgrid=False, linecolor=BASELINE_C,
@@ -260,7 +307,7 @@ def utilization_heatmap(result: SimulationResult,
                                          tickfont=dict(color=MUTED)),
         hovertemplate="%{y} · %{x}: %{z:.0f}%<extra></extra>",
         xgap=2, ygap=2))
-    return _layout(fig, f"Expected capacity utilization by month{title_suffix}",
+    return _layout(fig, f"Capacity utilization by month{title_suffix}",
                    "", "",
                    height=260, legend=False)
 
@@ -292,7 +339,7 @@ def component_risk_heatmap(components: pd.DataFrame,
         textfont=dict(size=10),
         hovertemplate="%{y} · %{x}: %{text}<extra></extra>", xgap=2, ygap=2))
     fig.update_xaxes(tickangle=30)
-    return _layout(fig, "Component risk profile (top binding items; shading scaled per row)",
+    return _layout(fig, "Component risk profile (top binding items; shading per row)",
                    "", "", height=340, legend=False)
 
 
@@ -312,7 +359,7 @@ def risk_matrix(family_risk: pd.DataFrame, base_kpi: dict) -> go.Figure:
             textfont=dict(size=10, color=INK2), name=fam,
             hovertemplate=(f"{fam}<br>Expected shortfall vs baseline: "
                            f"%{{x:.0f}}%<br>Revenue at risk: $%{{y:.0f}}M<extra></extra>")))
-    return _layout(fig, "Risk matrix — expected FY shortfall vs FY revenue at risk",
+    return _layout(fig, "Risk matrix — FY shortfall vs FY revenue at risk",
                    "Expected shortfall vs baseline plan (%)",
                    "FY revenue at risk ($M)", height=420, legend=False)
 
@@ -341,7 +388,7 @@ def family_risk_chart(family_risk: pd.DataFrame) -> go.Figure:
         text=[fmt_money(v) for v in df["revenue_at_risk"]],
         textposition="outside", textfont=dict(size=11, color=INK2),
         hovertemplate="%{y}: $%{x:.0f}M at risk<extra></extra>"))
-    fig = _layout(fig, "FY revenue at risk by product family (plan vs P5)",
+    fig = _layout(fig, "FY revenue at risk by family (plan vs P5)",
                   "Revenue at risk ($M)", "", height=360, legend=False)
     fig.update_yaxes(tickfont=dict(size=11, color=INK2))
     return fig
@@ -420,9 +467,9 @@ def backlog_trajectory_chart(base_result: SimulationResult,
             x=m, y=base_b.mean(axis=0), mode="lines",
             line=dict(color=INK, width=2, dash="dash"), name="Base case (expected)",
             hovertemplate="%{x}: %{y:.0f} systems<extra>Base case</extra>"))
-    title = ("Expected past-due backlog by month — base case"
+    title = ("Past-due backlog by month — base case"
              if scen_result is base_result else
-             f"Expected past-due backlog by month — base vs {scenario_name}")
+             f"Past-due backlog by month — base vs {scenario_name}")
     return _layout(fig, title, "", "Systems past due", height=400)
 
 
@@ -436,7 +483,7 @@ def past_due_family_chart(df: pd.DataFrame,
             x=m, y=df[fam], mode="lines", stackgroup="one",
             line=dict(width=0.5, color=SERIES[i % len(SERIES)]), name=fam,
             hovertemplate="%{x}: %{y:.0f} systems<extra>" + fam + "</extra>"))
-    return _layout(fig, f"Expected past-due backlog by family{title_suffix}",
+    return _layout(fig, f"Past-due backlog by family{title_suffix}",
                    "", "Systems past due", height=400)
 
 
@@ -457,7 +504,7 @@ def backlog_comparison_chart(base_curve: np.ndarray,
             marker=dict(size=5), name=name,
             hovertemplate="%{x}: %{y:.0f} systems<extra>" + name + "</extra>"))
     return _layout(fig,
-                   "Expected past-due backlog by month — scenarios vs base",
+                   "Past-due backlog by month — scenarios vs base",
                    "", "Systems past due", height=420)
 
 
