@@ -131,11 +131,68 @@ def _normalize_override(value):
 
 
 # business-language rendering of override keys for the claim-sheet view
+def _pts(v: float) -> str:
+    """A probability/rate delta as percentage points."""
+    return f"{100 * v:+.0f} pts"
+
+
+def _month(m: int) -> str:
+    """0-based planning month -> 1-based month number as people say it."""
+    return f"month {int(m) + 1}"
+
+
+def _profile(v: Any) -> str:
+    """A per-month multiplier path summarized as its start and end."""
+    seq = np.asarray(v, dtype=float)
+    if seq.ndim == 0:
+        return f"×{float(seq):g}"
+    lo, hi = float(seq[0]), float(seq[-1])
+    if abs(lo - hi) < 1e-9:
+        return f"×{lo:g}"
+    return f"×{lo:g} rising to ×{hi:g}" if hi > lo else f"×{lo:g} falling to ×{hi:g}"
+
+
 def describe_overrides(overrides: dict[str, Any]) -> str:
-    """Translate an action's simulation overrides into business language."""
+    """Translate simulation overrides into business language.
+
+    Used for both axes: an action's claim sheet (what we would *do*) and a
+    scenario's definition (what happens *to* us) — the same bundle primitive,
+    so both are inspectable and disputable in the UI."""
     bits: list[str] = []
     for key, v in overrides.items():
-        if key == "overtime_fraction":
+        # ---- world-side knobs (scenario definitions) ----
+        if key == "demand_market_mult":
+            bits += [f"{mkt} demand {_profile(x)}" for mkt, x in v.items()]
+        elif key == "pullin_prob_add":
+            bits.append(f"pull-in probability {_pts(v)}")
+        elif key == "pushout_prob_add":
+            bits.append(f"push-out probability {_pts(v)}")
+        elif key == "cancel_prob_mult":
+            bits.append(f"cancellation probability ×{v:g}")
+        elif key == "forced_pushout":
+            bits.append(f"{v['units']:g} {v['family']} systems moved from "
+                        f"{_month(v['from_month'])} to {_month(v['to_month'])}")
+        elif key == "lead_time_mult":
+            bits.append(f"component lead times ×{v:g}")
+        elif key == "comp_disrupt_mult":
+            bits.append(f"supplier disruption probability ×{v:g}")
+        elif key == "ems_window_mult":
+            bits += [f"{s}: capacity ×{mult:g} in months {int(m0) + 1}-{int(m1)}"
+                     for s, (m0, m1, mult) in v.items()]
+        elif key == "ems_capacity_mult":
+            bits += [f"{s}: capacity ×{x:g}" for s, x in v.items()]
+        elif key == "adherence_delta":
+            bits.append(f"schedule adherence {_pts(v)}")
+        elif key == "fpy_delta":
+            bits.append(f"first-pass yield {_pts(v)}")
+        elif key == "acceptance_delay_add":
+            bits.append(f"acceptance-slip probability {_pts(v)}")
+        elif key == "asp_mult":
+            bits.append(f"realized ASP ×{v:g}")
+        elif key == "freight_mult":
+            bits.append(f"freight cost ×{v:g}")
+        # ---- response-side knobs (action claim sheets) ----
+        elif key == "overtime_fraction":
             bits.append(f"authorize {v:.0%} of each site's maximum overtime")
         elif key == "overtime_start_month":
             bits.append(f"overtime effective from month {int(v) + 1}")
@@ -170,6 +227,24 @@ def describe_overrides(overrides: dict[str, Any]) -> str:
         else:
             bits.append(f"{key} = {v}")
     return "; ".join(bits)
+
+
+def scenario_assumptions_table(
+        scenarios: "dict[str, ScenarioSpec] | None" = None) -> "pd.DataFrame":
+    """The definition table for the world axis — what each scenario assumes
+    and which levers it moves, so a scenario is as inspectable and disputable
+    as an action's claim sheet."""
+    import pandas as pd
+    rows = []
+    for name, spec in (scenarios or prebuilt_scenarios()).items():
+        rows.append({
+            "Scenario": name,
+            "What it assumes": spec.description,
+            "Authored levers (the world)":
+                describe_overrides(spec.overrides)
+                or "no overrides — current SIOP assumptions",
+        })
+    return pd.DataFrame(rows)
 
 
 def action_assumptions_table(

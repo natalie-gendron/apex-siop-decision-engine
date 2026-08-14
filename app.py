@@ -36,6 +36,7 @@ from src.scenarios import (
     kpi_summary,
     management_actions,
     prebuilt_scenarios,
+    scenario_assumptions_table,
 )
 from src.sensitivity import (
     all_driver_rankings,
@@ -1058,6 +1059,18 @@ with tabs[7]:
         [s for s in scenarios if s != "Base Case"],
         default=["AI Surge with Supply Tightening", "Critical FPGA Shortage",
                  "Major Customer Push-Out", "EMS Malaysia Disruption"])
+    # the world's assumptions, on the page where the worlds are argued about:
+    # a delta is only debatable if the assumption behind it is visible
+    if chosen:
+        with st.expander("What these scenarios assume — the levers behind "
+                         "every delta below"):
+            for name in chosen:
+                s = scenarios[name]
+                st.markdown(md(f"**{name}** — {s.description}"))
+                st.caption(f"Levers: {describe_overrides(s.overrides)}")
+            st.caption("Scenarios are exogenous and carry no decision cost. "
+                       "Full table on Assumptions & Data; edit in "
+                       "src/scenarios.py.")
     rows = []
     scen_curves: dict = {}
     for name in chosen:
@@ -1293,6 +1306,15 @@ with tabs[9]:
         hide_index=True)
     st.caption("Edit config/default_config.yaml to change targets; use the sidebar "
                "custom scenario for what-if overrides without editing files.")
+
+    st.markdown("#### Scenario definitions (the world axis)")
+    st.caption("What each prebuilt scenario assumes and which simulation "
+               "levers it moves. Scenarios are exogenous — things that happen "
+               "*to* Apex — so they carry no decision cost; the response axis "
+               "is the action catalog below. Edit in src/scenarios.py; the "
+               "sidebar's Custom Scenario builds one of these bundles from "
+               "sliders without editing code.")
+    st.dataframe(scenario_assumptions_table(), width='stretch', hide_index=True)
 
     st.markdown("#### Management action claim sheets")
     st.caption("The authored assumptions behind every management action: the "
