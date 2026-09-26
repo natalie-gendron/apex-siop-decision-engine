@@ -368,15 +368,14 @@ def build_excel_export(
         # 15. Methodology
         method = pd.DataFrame({"Methodology notes": [
             "All data is synthetic; no real company data is used.",
-            "Baseline: deterministic greedy allocation (backlog first, customer "
-            "priority, requested date, contribution margin), respecting component, "
-            "EMS and integration constraints.",
+            "Baseline: the simulation engine run with zero shocks on one path "
+            "(one engine), respecting component, EMS and integration constraints.",
             "Monte Carlo: correlated common-factor model (8 factors, AR(1) "
             "persistence); bounded distributions (lognormal multipliers, Bernoulli "
             "disruptions, beta-shaped slip fractions).",
-            "Hybrid granularity: simulation runs at family x month with all 30 "
-            "critical components and site-level capacity; within-month rationing is "
-            "proportional (documented approximation of baseline priority order).",
+            "Granularity: family x month with all 30 critical components and "
+            "site-level capacity; scarce supply is rationed proportionally within "
+            "a family; EMS sites fill least-contested first.",
             "Financials: revenue = recognized units x realized ASP; COGS includes "
             "material (with PPV/FX), conversion, integration, freight, warranty, "
             "scrap, rework, expedite and overtime premiums.",

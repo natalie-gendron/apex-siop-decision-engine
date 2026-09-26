@@ -305,7 +305,7 @@ Full tables: `python spikes/customer_dimension/metrics.py`.
 
 Each step is a separate, reviewable change with a regression test.
 
-0. **Fix the EMS water-fill site order** in `run_simulation` (least-contested,
+0. **Done (build step 1).** **Fix the EMS water-fill site order** in `run_simulation` (least-contested,
    then cheapest, as the baseline already does). Measured on the current
    engine at 5,000 paths: mean FY revenue $2,595M to $2,657M (seeds 42 and 7
    agree within $3M). Independent of everything below; needs its own sign-off

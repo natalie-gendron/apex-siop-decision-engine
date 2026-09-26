@@ -1,8 +1,41 @@
 # Engine reconciliation: baseline plan vs Monte Carlo simulation
 
-Status: discovery, 2026-09. Evidence: `spikes/engine_reconciliation/` (seed 42,
-data generated to a temp dir). No `src/` change is proposed here without an
-agreed design.
+Status: **implemented** (build step 1, 2026-09). Evidence for the analysis
+below: `spikes/engine_reconciliation/` (seed 42, data generated to a temp dir),
+run against the pre-step-1 engine (commit f7f2e44); the spike no longer runs
+against current `src/`.
+
+## Outcome of step 1
+
+| Proposal | Decision | Where |
+|---|---|---|
+| 1. Shocks object | Built. `Shocks` scales ten named shock groups; `Shocks.zero()` switches all off. Draws are taken regardless of amplitude, so common random numbers survive | `src/shocks.py` |
+| 2. Baseline = engine | Built. `run_baseline` wraps `run_simulation(shocks=Shocks.zero(), n_sims=1)`; the priority queue and its cost formulas are deleted. Allocation stays proportional within a family until the customer dimension lands (step 3) | `src/baseline_plan.py` |
+| 3. Utilization penalty | Removed, not rebased. Driven by planned load capped at 100%, it becomes a constant derate of about 10% at every binding site, which is a calibration of the adherence input, not a mechanism | `src/simulation.py` |
+| 4. Receipt delay | Structural delay is now a shock (`receipt_delay`), zero in the zero-shock run | `src/simulation.py` |
+| 5. One policy each | Safety stock: 30% not usable, all physical stock valued. Unit cost: `operations.standard_unit_cost` for COGS and FG, rework from FPY. Damping kept in the one engine until step 4. Integer floors gone | `src/operations.py`, `src/simulation.py` |
+| 6. Constraint log | Each unit logged once, in the month it first misses its requested date, against the ceiling that cut it. Installation capacity removed | `src/baseline_plan.py` |
+| Site-fill order | Least-contested site first, then cheapest | `src/simulation.py` |
+| Adherence | Each site uses its own scheduled adherence | `src/simulation.py` |
+
+Guard: `tests/test_engine_reconciliation.py` (no spread at zero shocks; exact
+equality with the baseline on units, revenue, COGS, inventory and cash; each
+late unit logged once).
+
+Effect, base world (Moderate confidence, 5,000 paths, seed 42), each change
+added in turn from the old engine:
+
+| Change | FY revenue $M | P(FY plan) | End inventory $M | E&O $M | Overtime EV $M | Reserve EMS EV $M |
+|---|---:|---:|---:|---:|---:|---:|
+| Old engine | 2,595.4 | 62.3% | 519.1 | 42.7 | +60.2 | +35.5 |
+| Stock valued incl. unusable safety stock | 2,595.4 | 62.3% | 530.0 | 47.4 | +60.2 | +35.5 |
+| Per-site adherence | 2,600.5 | 63.5% | 529.2 | 46.9 | +58.9 | +34.8 |
+| Site-fill order | 2,658.4 | 74.8% | 518.8 | 42.0 | +39.5 | +22.2 |
+| Penalty removed (= new engine) | 2,757.5 | 84.3% | 493.7 | 33.9 | -1.4 | -1.5 |
+
+The baseline plan of record moves from $2,842.3M to $2,824.7M FY revenue
+(-0.6%): the site-fill order recovers most of what proportional rationing
+loses against the old priority greedy.
 
 ## Executive summary
 

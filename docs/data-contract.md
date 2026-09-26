@@ -15,11 +15,11 @@ Horizon: 18 monthly buckets. Refresh cadence assumes a monthly SIOP cycle with a
 | Field | Grain | Refresh | Likely owner | Replaces (synthetic) | Status |
 |---|---|---|---|---|---|
 | Consensus demand, forecast (unbooked) units | customer x family x month | Monthly | Demand Planning | `demand_plan.base_forecast_units` | Used |
-| Firm backlog units | customer x family x month (ideally order line) | Weekly | Sales Ops / CRM | `demand_plan.backlog_units` | Used (baseline serves backlog first; sim uses total only) |
-| Customer requested date | order line or customer x family x month | Weekly | Sales Ops / CRM | `demand_plan.requested_month` | Used (baseline sort tie-break only; sim ignores) |
+| Firm backlog units | customer x family x month (ideally order line) | Weekly | Sales Ops / CRM | `demand_plan.backlog_units` | Used as total only; the firm split is unused until the customer dimension (build step 3). Before step 1 the old baseline served backlog first |
+| Customer requested date | order line or customer x family x month | Weekly | Sales Ops / CRM | `demand_plan.requested_month` | Generated but unused since step 1 (the old baseline used it as a sort tie-break) |
 | Committed (promised) date | order line | Weekly | Planning / Order Mgmt | `demand_plan.committed_month` | Generated but unused (always equals `month`) |
 | Bookings units | customer x family x month | Monthly | Sales Ops | `demand_plan.bookings_units` | Generated but unused (copy of backlog) |
-| Customer priority / allocation tier | customer | Quarterly | SIOP leadership | `demand_plan.customer_priority` | Used (baseline sort) |
+| Customer priority / allocation tier | customer | Quarterly | SIOP leadership | `demand_plan.customer_priority` | Unused since step 1 (old baseline sort); returns as the strict-priority policy in build step 3 |
 | Customer group, region | customer | On change | Sales Ops | `demand_plan.customer_group`, `.region` | Used (score only / exports) |
 | Customer ASP | customer x family (x month if price changes) | Quarterly | Pricing / ERP | `demand_plan.asp_usd` | Used, but collapsed to a demand-weighted family average before revenue is computed |
 | Customer site readiness (install sites ready) | customer x family | Monthly | Service / CRM | `demand_plan.site_readiness_prob` | Used (sim acceptance slip) |
@@ -36,7 +36,7 @@ Horizon: 18 monthly buckets. Refresh cadence assumes a monthly SIOP cycle with a
 | Open POs, dated | part x PO line x confirmed date x qty | Weekly | Procurement | `components.open_po_units_per_month` (flat monthly rate) | Used (as a flat rate; dated receipts Missing) |
 | Supplier lead time | part x supplier | Monthly | Procurement | `components.lead_time_weeks` | Used (sim delay fraction) |
 | Lead-time variability | part x supplier | Quarterly | Procurement | `components.lead_time_std_weeks` | Generated but unused |
-| Safety stock policy | part (x location) | Quarterly | Materials | `components.safety_stock_units` | Used (sim: 30% hard floor; baseline ignores it) |
+| Safety stock policy | part (x location) | Quarterly | Materials | `components.safety_stock_units` | Used (one engine: 30% not usable for builds; all stock valued) |
 | Minimum order quantity | part x supplier | On change | Procurement | `components.min_order_qty` | Generated but unused |
 | Usage per system, critical parts | part x family | On BOM change | Engineering / Planning | `components.usage_per_system`, `.products_using` | Used |
 | Supplier allocation exposure | part | Monthly | Procurement | `components.allocation_risk` | Used (sim delay fraction) |
@@ -48,8 +48,8 @@ Horizon: 18 monthly buckets. Refresh cadence assumes a monthly SIOP cycle with a
 | Schedule adherence, labor availability, first-pass yield | EMS site x month | Monthly | EMS scorecards | `ems_capacity.schedule_adherence`, `.labor_availability`, `.first_pass_yield` | Used |
 | Build cycle time | family (x site) | Quarterly | Planning | `products.build_cycle_months` | Used (WIP value); `ems_capacity.cycle_time_weeks` Generated but unused |
 | Final integration and test capacity at EMS | EMS site x month | Monthly | EMS Program Mgmt | `integration_capacity.integration_capacity_units` (modeled as two in-house sites) | Used, but structurally wrong: target business integrates at the EMS, so this should fold into EMS capacity or become a per-site test-cell constraint |
-| Installation capacity | region x month | Monthly | Field Service | `integration_capacity.installation_capacity_units` | Read, never binds (baseline decrements it, sim ignores) |
-| Allocation / priority rules | rule set | On change | SIOP leadership | none (hard-coded heuristic in `baseline_plan.py`; proportional rationing in `simulation.py`) | Missing |
+| Installation capacity | region x month | Monthly | Field Service | `integration_capacity.installation_capacity_units` | Generated but unused (removed from the engine, 2026-09: never enforced, and not a target constraint) |
+| Allocation / priority rules | rule set | On change | SIOP leadership | none (one engine, proportional within family; selectable policy planned in build step 3) | Missing |
 | Constrained supply plan (if solved) | family x site x month, pegged to customer | Weekly | Planning | none (APEX solves its own rough cut) | Missing, unconfirmed whether it exists |
 
 ### 1.3 ERP (Finance systems, Cost Accounting)
@@ -61,7 +61,7 @@ Horizon: 18 monthly buckets. Refresh cadence assumes a monthly SIOP cycle with a
 | EMS conversion cost per std unit | EMS site | Per contract | Cost Accounting / EMS contracts | `ems_sites.cost_per_std_unit_usd` | Used (overtime premium base) |
 | ASP by customer x family | customer x family | Quarterly | Pricing | `demand_plan.asp_usd` (`products.list_asp_usd` unused) | Used (see 1.1) |
 | Rev-rec policy and acceptance lag | family (x customer where contracts differ) | On policy change | Revenue Accounting | `products.acceptance_lag_months` (lag >= 0.75 means 1-month lag) | Used; `demand_plan.revrec_method` Generated but unused |
-| Rework and scrap rates | family | Quarterly | Quality / Cost Accounting | `products.rework_prob`, `.scrap_prob` | Used (COGS); `ems_capacity.rework_rate`, `.scrap_rate` Generated but unused |
+| Rework and scrap rates | family | Quarterly | Quality / Cost Accounting | `products.scrap_prob` | Used (COGS). Rework is driven by EMS first-pass yield; `products.rework_prob`, `ems_capacity.rework_rate`, `.scrap_rate` Generated but unused |
 | Inventory value by class (RM critical, RM other, WIP, FG / awaiting acceptance) | class x month (actuals) | Monthly close | Controller | none (engine derives; non-critical RM is a 0.9-month proxy) | Missing (needed to anchor opening balance) |
 | E&O / obsolescence policy | part or class | Annual | Controller | `config.financial.eo_reserve_rate` (0.25), hard-coded 2.5-month excess and 5% FG factor; `components.obsolescence_risk` | Rate Used; `obsolescence_risk` Used (score only: validation range check) |
 
@@ -138,17 +138,13 @@ Verified by `grep -rnw` over all `*.py` outside `src/data_generator.py` and `tes
 
 | Field | Where read | Note |
 |---|---|---|
-| `requested_month` | `baseline_plan.py:76` | Sort tie-break in baseline only; Monte Carlo ignores it |
-| `customer_priority` | `baseline_plan.py:76` | Baseline only; sim rations proportionally, so the two engines allocate shortages differently |
-| `installation_capacity_units` | `operations.py:125` | Baseline decrements `install_remaining` but never checks it; never binds |
-| `safety_stock_units` | `simulation.py` (30% floor) | Baseline starts from full on-hand and ignores it |
 | `asp_usd` | `operations.py` `wavg` | Customer ASP averaged to family, so customer mix does not change revenue per unit |
 
 ---
 
 ## 3. Solved constrained plan vs visibility data
 
-APEX runs its own rough-cut allocation (`baseline_plan.py`, `simulation.py`). The question is which inputs only exist if the planning system actually solves constraints, and which a "glass window" of parts, on-hand and POs can supply.
+APEX runs its own rough-cut allocation (one engine, `simulation.py`). The question is which inputs only exist if the planning system actually solves constraints, and which a "glass window" of parts, on-hand and POs can supply.
 
 ### 3.1 Assumes a solved constrained plan (flag)
 
@@ -176,7 +172,7 @@ APEX runs its own rough-cut allocation (`baseline_plan.py`, `simulation.py`). Th
 | Overtime, fees, ramp limits, min lots | EMS contracts |
 | Calibration history | Snapshots of plan vs actual from any system that keeps history |
 
-Implication: with visibility data alone, APEX's rough-cut solver stays the only allocation logic, so the heuristic in `baseline_plan.py` and the proportional rationing in `simulation.py` must be reconciled (see `docs/engine-reconciliation.md`) and the rules approved by SIOP.
+Implication: with visibility data alone, APEX's rough-cut solver stays the only allocation logic, so its allocation rule (one engine since 2026-09, see `docs/engine-reconciliation.md`) must be approved by SIOP.
 
 ---
 

@@ -140,10 +140,10 @@ sync.
 | Layer | Contents | Code |
 | --- | --- | --- |
 | 0 · Data | 7 synthetic input tables, validation gate; V2 seam: synthetic/uploaded selector toward real ERP/CRM feeds | `data_generator`, `validation` |
-| 1 · Plan of record | Baseline supply plan (deterministic greedy allocation); the frozen anchor | `baseline_plan` |
+| 1 · Plan of record | Baseline supply plan: the layer-4 engine run with zero shocks, one path; the frozen anchor | `baseline_plan`, `shocks` |
 | 2 · Evidence | Demand Confidence: 8 weighted signals + curated external intel → sim-parameter backdrop merged into every run | `market_intelligence` |
 | 3 · Evaluation context | (world, response); scenarios exogenous-only; actions/claim sheets; layering via `merge_confidence_params` | `scenarios`, `config/management_actions.yaml` |
-| 4 · Simulation | Correlated common-factor Monte Carlo; capacity rationing; financial translation | `correlations`, `simulation`, `operations` |
+| 4 · Simulation | The one engine: correlated common-factor Monte Carlo; capacity rationing; financial translation | `correlations`, `simulation`, `operations`, `shocks` |
 | 5 · Views | Plan-of-record vs outcome views; three reference frames; KPI/compare | `app.py`, `visualizations`, `sensitivity` |
 | 6 · Decision & governance | Rules-based risks, ranked recommendations, conditioned narrative, signed Excel readout (deliberately base-anchored) | `recommendations`, `executive_report`, `exports` |
 
@@ -230,9 +230,29 @@ Executive answer first, then the meeting's supporting flow:
   a table that disagrees with the Overview for the same world reads as a
   bug, not a nuance. (Its previous hardcoded 1,500 paths were retired
   2026-08-10.)
-- **The sim mean sits below the deterministic baseline by design** (capacity
-  caps demand upside asymmetrically) — the risk-adjusted outlook story, not
-  a bug.
+- **One engine** (2026-09, `docs/engine-reconciliation.md`). The baseline
+  supply plan is `run_simulation(shocks=Shocks.zero(), n_sims=1)`; there is
+  no second allocator and no second cost or inventory formula. Every source
+  of randomness is scaled by a named amplitude in `Shocks`, and zero means
+  zero (tested: no spread across paths or seeds, and exact equality with the
+  baseline). Scenario and response levers are not shocks and still apply in a
+  zero-shock run.
+- **The outlook mean sits below the baseline** because capacity caps the
+  demand upside asymmetrically, not because the engines differ. Any gap at
+  zero shocks is a defect, guarded by `tests/test_engine_reconciliation.py`.
+- **No utilization adherence penalty** (2026-09). It derated EMS capacity a
+  second time on top of the scheduled-adherence input, was driven by
+  unconstrained demand (so demand up cut revenue and EMS capacity actions
+  were valued about 2.3x), and had no owner or data source. Each site runs at
+  its own scheduled adherence. If an owner shows adherence erodes with load,
+  it enters as an owned input, not a hidden derate.
+- **EMS sites fill least-contested first, then cheapest** (2026-09), so
+  flexible multi-family sites stay available for families with no
+  alternative.
+- **One stock policy** (2026-09, interim). 30% of the safety-stock policy is
+  not usable for builds, and all physical stock, including that 30%, is
+  valued in inventory and E&O. The purchasing damping on raw-material
+  valuation stays until purchases respond to demand (build step 4).
 - **Demand stays unconstrained** — the demand plan feeds requested dates,
   not supply-committed dates.
 

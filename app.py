@@ -1507,14 +1507,15 @@ engine's planned next capability.
     st.markdown("#### Methodology")
     st.markdown(
         """
-**Baseline plan.** Deterministic greedy allocation by month: firm backlog before
-forecast, higher customer priority first, earlier requested date, then higher
-contribution margin per standard-equivalent unit. Builds go only to qualified
-EMS sites (least-contested site first, then cost) and respect component
-availability, EMS capacity (derated by adherence and labor), and final
-integration capacity. Unmet demand rolls forward and ages. The heuristic is
-transparent but greedy — it does not optimize across months; a MILP is a
-documented Version-2 candidate.
+**Baseline plan.** One engine: the baseline supply plan is the Monte Carlo
+engine run with every shock switched off, on a single path. It cannot
+disagree with the simulation on allocation, cost or inventory. Builds go only
+to qualified EMS sites (least-contested site first, then cost) and respect
+component availability, EMS capacity (derated by each site's scheduled
+adherence and labor), and final integration capacity. Unmet demand rolls
+forward and ages; each unit that misses its requested month is logged once
+against the constraint that cut it. The allocation does not optimize across
+months; a MILP is a documented Version-2 candidate.
 
 **Monte Carlo.** Correlated common-factor model: eight factors (semicap cycle,
 AI/HPC, memory, mobile, auto/industrial, component tightness, logistics, EMS
@@ -1523,9 +1524,9 @@ loadings whose squared sum ≤ 1, so the implied correlation matrix is positive
 semidefinite by construction. Distributions are bounded: lognormal mean-one
 multipliers for demand/cost, Bernoulli disruption events, beta-shaped
 acceptance-slip fractions, clipped probabilities. Demand timing shocks
-(pull-ins, push-outs, cancellations) shift units between months; supply is
-rationed proportionally within each month (a vectorized approximation of the
-baseline priority order — documented simplification). Revenue recognizes at
+(pull-ins, push-outs, cancellations) shift units between months; scarce
+supply is rationed proportionally within each product family (customer-level
+allocation policy is planned). Revenue recognizes at
 shipment or one month later for acceptance-based families, with stochastic
 acceptance/site-readiness slip.
 
@@ -1538,9 +1539,9 @@ inventory + simplified receivables (DSO) − simplified payables (DPO). E&O is a
 reserve rate on critical-component stock above 2.5 months of forward usage
 plus 5% of aged finished goods.
 
-**Known simplifications.** Monthly buckets; family-level Monte Carlo (customer
-detail lives in the deterministic baseline); proportional within-month
-rationing; no balance-sheet FX; recognition simplified to a 0/1-month lag with
+**Known simplifications.** Monthly buckets; family-level allocation with
+proportional rationing within a family (customer dimension planned); no
+balance-sheet FX; recognition simplified to a 0/1-month lag with
 stochastic slip; overtime/reservation costs approximated. A fast, credible
 prototype is preferred to an unusably detailed model — see README for the full
 list and Version-2 candidates.

@@ -77,6 +77,15 @@ class SimulationResult:
     site_disrupted: dict[str, np.ndarray] = field(default_factory=dict)
     drivers: dict[str, np.ndarray] = field(default_factory=dict)  # sampled inputs for sensitivity
     params: dict[str, Any] = field(default_factory=dict)
+    # allocation detail (per path); the baseline supply plan reads path 0
+    family_backlog: np.ndarray | None = None   # (n, M, F) end-of-month unmet (past-due)
+    site_load: np.ndarray | None = None        # (n, S, M) std-units built per EMS site
+    site_capacity: np.ndarray | None = None    # (n, S, M) effective std-unit capacity
+    integration_capacity: np.ndarray | None = None  # (n, M)
+    limit_units: np.ndarray | None = None      # (3, n, M, F) cut by component / EMS / integration
+    binding_component: np.ndarray | None = None  # (n, M, F) index of ceiling component, -1 none
+    component_consumed: np.ndarray | None = None  # (n, M, C) units consumed per month
+    component_usable_supply: np.ndarray | None = None  # (n, M, C) cumulative usable supply
 
     @property
     def gross_margin(self) -> np.ndarray:

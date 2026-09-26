@@ -41,7 +41,6 @@ class UncertaintySettings(BaseModel):
     conversion_cost_sigma: float = Field(ge=0)
     freight_sigma: float = Field(ge=0)
     ems_labor_sigma: float = Field(ge=0)
-    utilization_adherence_penalty: float = Field(ge=0, le=0.5)
     site_disruption_impact: float = Field(ge=0, le=1)
 
     @field_validator("market_demand_sigma")

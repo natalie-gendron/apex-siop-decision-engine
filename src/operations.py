@@ -42,7 +42,6 @@ class PlanningArrays:
     site_disrupt_prob: np.ndarray     # (n_sites,)
     site_qual: np.ndarray             # (n_sites, n_fam) 1 if family qualified
     integration_capacity: np.ndarray  # (n_months,) total systems/month across sites
-    installation_capacity: np.ndarray # (n_months,)
     comp_names: list[str]
     comp_on_hand: np.ndarray          # (n_comp,)
     comp_po_monthly: np.ndarray       # (n_comp,)
@@ -118,11 +117,9 @@ def build_planning_arrays(data: InputData) -> PlanningArrays:
 
     integ = data.integration_capacity
     integration_capacity = np.zeros(N_MONTHS)
-    installation_capacity = np.zeros(N_MONTHS)
     for _, r in integ.iterrows():
         j = m_ix[r["month"]]
         integration_capacity[j] += r["integration_capacity_units"] * r["labor_availability"]
-        installation_capacity[j] += r["installation_capacity_units"]
 
     comp = data.components
     comp_usage = np.zeros((len(comp), n_f))
@@ -148,7 +145,6 @@ def build_planning_arrays(data: InputData) -> PlanningArrays:
         site_ot_premium=site_ot_premium,
         site_disrupt_prob=site_disrupt, site_qual=site_qual,
         integration_capacity=integration_capacity,
-        installation_capacity=installation_capacity,
         comp_names=comp["component"].tolist(),
         comp_on_hand=comp["on_hand_units"].to_numpy(float),
         comp_po_monthly=comp["open_po_units_per_month"].to_numpy(float),
@@ -172,3 +168,24 @@ def effective_site_capacity(pa: PlanningArrays, overtime: bool = False) -> np.nd
     if overtime:
         cap = cap + pa.site_overtime
     return cap
+
+
+def standard_unit_cost(data: InputData, families: list[str],
+                       fpy: float) -> dict[str, np.ndarray]:
+    """The one unit-cost policy, per family: standard cost build-up plus scrap
+    and expected rework (units failing first pass reworked at half conversion
+    cost). COGS applies cost shocks to the components; finished goods are
+    valued at `standard`."""
+    prod = data.products.set_index("product_family").loc[families]
+    out = {
+        "material": prod["material_cost_usd"].to_numpy(float),
+        "conversion": prod["ems_conversion_cost_usd"].to_numpy(float),
+        "integration": prod["integration_test_cost_usd"].to_numpy(float),
+        "freight": prod["freight_cost_usd"].to_numpy(float),
+        "warranty": prod["warranty_reserve_usd"].to_numpy(float),
+        "scrap": (prod["scrap_prob"] * prod["material_cost_usd"]).to_numpy(float),
+    }
+    out["rework"] = (1.0 - fpy) * 0.5 * out["conversion"]
+    out["standard"] = sum(out[k] for k in ("material", "conversion", "integration",
+                                           "freight", "warranty", "scrap", "rework"))
+    return out

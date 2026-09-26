@@ -1,13 +1,14 @@
-"""Correlated Monte Carlo simulation of the 18-month SIOP plan.
+"""The APEX engine: correlated Monte Carlo of the 18-month SIOP plan.
 
-Hybrid granularity (documented simplification): the deterministic baseline plan
-runs at customer/site/component detail; the Monte Carlo engine simulates the
-decision-relevant aggregates — demand by product family and month, EMS capacity
-by site, supply for all 30 critical components, integration capacity, and the
-financial translation. Within each month, scarce components and integration
-capacity are rationed proportionally to demand (a vectorized approximation of
-the baseline's priority ordering). Results reconcile to the baseline when all
-shocks are set to zero.
+One engine. The deterministic baseline supply plan is this function run with
+`Shocks.zero()` and one path (`baseline_plan.run_baseline`); there is no
+second allocator and no second financial translation.
+
+Granularity: demand by product family and month, EMS capacity by site, supply
+for all 30 critical components, integration capacity, and the financial
+translation. Within each month, scarce components and integration capacity are
+rationed proportionally within a family; EMS capacity is water-filled across
+sites, least-contested site first, then cheapest.
 
 All distributions are bounded: multiplicative shocks are lognormal (positive),
 probabilities are clipped to [0, 1], capacities floored at zero, and discrete
@@ -23,7 +24,8 @@ import numpy as np
 from .config import AppConfig
 from .correlations import FactorEngine
 from .models import BaselineResult, InputData, SimulationResult
-from .operations import PlanningArrays, build_planning_arrays
+from .operations import PlanningArrays, build_planning_arrays, standard_unit_cost
+from .shocks import Shocks
 from .utils import FAMILY_MARKET, N_MONTHS, PRODUCT_FAMILIES
 
 
@@ -74,14 +76,23 @@ def _lognormal_mult(shock: np.ndarray, sigma: float) -> np.ndarray:
     return np.exp(sigma * shock - 0.5 * sigma ** 2)
 
 
-def run_simulation(data: InputData, config: AppConfig, baseline: BaselineResult,
+def run_simulation(data: InputData, config: AppConfig,
+                   baseline: BaselineResult | None = None,
                    params: dict[str, Any] | None = None, n_sims: int = 5000,
                    seed: int = 42, scenario_name: str = "Base Case",
-                   progress_cb=None) -> SimulationResult:
-    """Run the vectorized correlated Monte Carlo simulation."""
+                   progress_cb=None, shocks: Shocks | None = None,
+                   keep_component_paths: bool = False) -> SimulationResult:
+    """Run the vectorized correlated Monte Carlo simulation.
+
+    `shocks` scales every source of randomness (default: as calibrated).
+    With `Shocks.zero()` every path is identical and equals the baseline
+    supply plan. `baseline` is accepted for call-site compatibility and is
+    not read. `keep_component_paths` stores per-component consumption and
+    usable supply (large; the baseline views need them, the app does not)."""
     p = default_params()
     if params:
         p.update(params)
+    sh = shocks or Shocks()
 
     pa = build_planning_arrays(data)
     unc = config.uncertainty
@@ -103,7 +114,7 @@ def run_simulation(data: InputData, config: AppConfig, baseline: BaselineResult,
     # 1. Demand: correlated market multipliers + timing events
     # ------------------------------------------------------------------
     market_shock = {mkt: engine.shock(mkt, factors, rng) for mkt in unc.market_demand_sigma}
-    sigma_mult = float(p["demand_sigma_mult"])
+    sigma_mult = float(p["demand_sigma_mult"]) * sh.demand
     demand = np.empty((n_sims, M, n_f))
     for f, fam in enumerate(fams):
         mkt = FAMILY_MARKET[fam]
@@ -118,11 +129,14 @@ def run_simulation(data: InputData, config: AppConfig, baseline: BaselineResult,
         demand[:, :, f] = pa.demand_units[None, :, f] * mult * idio * scen_path[None, :]
 
     # cancellations (remove), push-outs (shift +1/+2), pull-ins (shift -1)
-    cancel_p = np.clip(pa.cancel_prob[None, None, :] * p["cancel_prob_mult"], 0, 1)
-    push_p = np.clip(pa.pushout_prob[None, None, :] + p["pushout_prob_add"], 0, 1)
-    pull_p = np.clip(pa.pullin_prob[None, None, :] + p["pullin_prob_add"], 0, 1)
+    # calibrated event rates scale with the timing shock; lever deltas
+    # (pushout_prob_add etc.) apply on top, so they survive a zero-shock run
+    ev = sh.timing_events
+    cancel_p = np.clip(pa.cancel_prob[None, None, :] * ev * p["cancel_prob_mult"], 0, 1)
+    push_p = np.clip(pa.pushout_prob[None, None, :] * ev + p["pushout_prob_add"], 0, 1)
+    pull_p = np.clip(pa.pullin_prob[None, None, :] * ev + p["pullin_prob_add"], 0, 1)
     # sim-level heterogeneity in timing behavior (beta-like via lognormal clipping)
-    timing_noise = _lognormal_mult(rng.standard_normal((n_sims, 1, 1)), 0.35)
+    timing_noise = _lognormal_mult(rng.standard_normal((n_sims, 1, 1)), 0.35 * ev)
     push_p = np.clip(push_p * timing_noise, 0, 0.6)
     pull_p = np.clip(pull_p * timing_noise ** 0.5, 0, 0.3)
 
@@ -154,8 +168,8 @@ def run_simulation(data: InputData, config: AppConfig, baseline: BaselineResult,
     # ------------------------------------------------------------------
     if progress_cb:
         progress_cb(0.25, "Simulating component supply")
-    tight_shock = engine.shock("Component tightness", factors, rng)      # (n, M)
-    logistics_shock = engine.shock("Logistics disruption", factors, rng)
+    tight_shock = engine.shock("Component tightness", factors, rng) * sh.component_tightness
+    logistics_shock = engine.shock("Logistics disruption", factors, rng) * sh.logistics
 
     receipts_nominal = np.tile(pa.comp_po_monthly[None, None, :], (n_sims, M, 1))
     for comp, mult in p["comp_supply_mult"].items():
@@ -171,7 +185,7 @@ def run_simulation(data: InputData, config: AppConfig, baseline: BaselineResult,
 
     # delay fraction rises with supply tightness, logistics disruption and lead time
     lt_weeks = pa.comp_lead_time[None, None, :] * p["lead_time_mult"]
-    base_delay = np.clip((lt_weeks - 8.0) / 100.0, 0.01, 0.25)
+    base_delay = np.clip((lt_weeks - 8.0) / 100.0, 0.01, 0.25) * sh.receipt_delay
     delay_frac = np.clip(
         base_delay
         + 0.06 * np.clip(tight_shock, 0, None)[:, :, None] * pa.comp_alloc_risk[None, None, :] * 2.0
@@ -180,6 +194,7 @@ def run_simulation(data: InputData, config: AppConfig, baseline: BaselineResult,
         0.0, 0.6,
     )
     disrupt_p = np.clip(pa.comp_disrupt[None, None, :] * p["comp_disrupt_mult"]
+                        * sh.component_disruption
                         * (1 + 0.8 * np.clip(tight_shock, 0, None))[:, :, None], 0, 0.5)
     disrupted = rng.random((n_sims, M, n_c)) < disrupt_p
 
@@ -228,10 +243,14 @@ def run_simulation(data: InputData, config: AppConfig, baseline: BaselineResult,
     # ------------------------------------------------------------------
     if progress_cb:
         progress_cb(0.45, "Simulating EMS and integration capacity")
-    ems_shock = engine.shock("EMS execution", factors, rng)             # (n, M)
+    ems_shock = engine.shock("EMS execution", factors, rng) * sh.ems_execution  # (n, M)
     labor_mult = np.clip(_lognormal_mult(ems_shock, unc.ems_labor_sigma), 0.7, 1.1)
 
+    # each site runs at its own scheduled adherence (EMS scorecard input);
+    # overtime capacity is derated by the same adherence as base capacity
+    adherence = np.clip(pa.site_adherence + p["adherence_delta"], 0.0, 1.0)   # (S, M)
     site_cap = np.empty((n_sims, n_s, M))
+    base_cap_total = np.zeros((n_sims, M))
     site_disrupted: dict[str, np.ndarray] = {}
     for s, site in enumerate(pa.site_names):
         base = pa.site_capacity[s] * pa.site_labor[s]                   # (M,)
@@ -246,30 +265,15 @@ def run_simulation(data: InputData, config: AppConfig, baseline: BaselineResult,
             m0, m1, wmult = p["ems_window_mult"][site]
             cap = cap.copy()
             cap[:, m0:m1] *= wmult
-        events = rng.random((n_sims, M)) < pa.site_disrupt_prob[s]
+        events = rng.random((n_sims, M)) < pa.site_disrupt_prob[s] * sh.site_disruption
         site_disrupted[site] = events.any(axis=1)
         cap = cap * np.where(events, 1 - unc.site_disruption_impact, 1.0)
         cap = cap * labor_mult
-        cap_no_ot = np.clip(cap, 0, None)
+        base_cap_total += np.clip(cap, 0, None) * adherence[s][None, :]
         ot_mask = np.ones(M)
         ot_mask[:int(p["overtime_start_month"])] = 0.0
         cap = cap + p["overtime_fraction"] * pa.site_overtime[s][None, :] * ot_mask[None, :]
-        site_cap[:, s, :] = np.clip(cap, 0, None)
-        if s == 0:
-            base_cap_total = cap_no_ot.copy()
-        else:
-            base_cap_total += cap_no_ot
-
-    # utilization feedback: high load erodes schedule adherence (and thus output)
-    demand_std = (demand * pa.family_complexity[None, None, :]).sum(axis=2)  # (n, M)
-    total_cap_raw = site_cap.sum(axis=1)
-    util_prelim = demand_std / np.clip(total_cap_raw, 1e-9, None)
-    adherence_base = (pa.site_adherence.mean(axis=0)[None, :] + p["adherence_delta"])
-    adherence_eff = np.clip(
-        adherence_base - unc.utilization_adherence_penalty * np.clip(util_prelim - 0.92, 0, None) / 0.10,
-        0.6, 1.0,
-    )
-    site_cap = site_cap * adherence_eff[:, None, :]
+        site_cap[:, s, :] = np.clip(cap, 0, None) * adherence[s][None, :]
 
     integ_mult_path = np.full(M, p["integration_capacity_mult"])
     if p["integration_capacity_ramp"]:
@@ -278,10 +282,9 @@ def run_simulation(data: InputData, config: AppConfig, baseline: BaselineResult,
     integ_cap = (pa.integration_capacity[None, :] * integ_mult_path[None, :]
                  * np.clip(labor_mult, 0.8, 1.05))
 
-    # first-pass yield: good output = builds * fpy_eff; rework recovered at cost
+    # first-pass yield drives rework cost (output effect: propagation spec)
     fpy_base = float((pa.site_fpy * pa.site_capacity).sum() / pa.site_capacity.sum())
     fpy_eff = np.clip(fpy_base + p["fpy_delta"]
-                      - 0.03 * np.clip(util_prelim - 0.9, 0, None) / 0.1
                       - 0.02 * np.clip(-ems_shock, 0, None), 0.7, 0.99)
 
     # ------------------------------------------------------------------
@@ -294,13 +297,24 @@ def run_simulation(data: InputData, config: AppConfig, baseline: BaselineResult,
     for q_site, q_family, q_start in p["add_qualification"]:
         qual_by_month[q_start:, pa.site_names.index(q_site), fams.index(q_family)] = 1.0
 
+    # fill least-contested sites first (fewest qualified families), then the
+    # cheapest, so flexible multi-family sites stay available for families
+    # with no alternative
+    site_order = [np.lexsort((pa.site_cost, qual_by_month[m].sum(axis=1)))
+                  for m in range(M)]
+
     ship = np.zeros((n_sims, M, n_f))
     backlog = np.zeros((n_sims, n_f))
+    backlog_path = np.zeros((n_sims, M, n_f))      # end-of-month unmet (past-due)
     cum_consumed = np.zeros((n_sims, n_c))
     comp_short = np.zeros((n_sims, M))
     cap_short = np.zeros((n_sims, M))
     comp_binding_count = np.zeros((n_sims, n_c))
+    site_load = np.zeros((n_sims, n_s, M))         # std-units actually built
+    limit_units = np.zeros((3, n_sims, M, n_f))    # cut by component / EMS / integration
+    binding_comp = np.full((n_sims, M, n_f), -1)   # component that set each family's ceiling
     usage = pa.comp_usage                                              # (C, F)
+    fam_uses = [usage[:, f] > 0 for f in range(n_f)]
 
     for m in range(M):
         want = demand[:, m, :] + backlog                               # (n, F)
@@ -313,17 +327,20 @@ def run_simulation(data: InputData, config: AppConfig, baseline: BaselineResult,
         # a family's scale is the worst of its components
         fam_scale = np.ones((n_sims, n_f))
         for f in range(n_f):
-            used = usage[:, f] > 0
+            used = fam_uses[f]
             if used.any():
-                fam_scale[:, f] = scale_c[:, used].min(axis=1)
+                sc = np.where(used[None, :], scale_c, np.inf)
+                fam_scale[:, f] = sc.min(axis=1)
+                binding_comp[:, m, f] = np.where(fam_scale[:, f] < 0.999,
+                                                 sc.argmin(axis=1), -1)
         binding = scale_c < 0.999
         comp_binding_count += binding & (req > 1e-9)
         after_comp = want * fam_scale
 
         # EMS capacity by family: iterative water-filling. Each round, every
-        # site allocates its remaining capacity across qualified families in
-        # proportion to their remaining standard-equivalent demand; three
-        # rounds recover nearly all slack a single proportional pass strands.
+        # site (least-contested first) allocates its remaining capacity across
+        # qualified families in proportion to their remaining std-equivalent
+        # demand; three rounds recover nearly all slack a single pass strands.
         after_cap = np.zeros((n_sims, n_f))
         site_rem = site_cap[:, :, m].copy()                            # (n, S)
         for _ in range(3):
@@ -331,7 +348,7 @@ def run_simulation(data: InputData, config: AppConfig, baseline: BaselineResult,
             unmet_std = unmet_u * pa.family_complexity[None, :]
             if unmet_std.sum() < 1e-6:
                 break
-            for s in range(n_s):
+            for s in site_order[m]:
                 qual = qual_by_month[m, s]                             # (F,)
                 q_std = unmet_std * qual[None, :]
                 denom = q_std.sum(axis=1, keepdims=True)
@@ -350,7 +367,12 @@ def run_simulation(data: InputData, config: AppConfig, baseline: BaselineResult,
 
         ship[:, m, :] = shipped
         backlog = want - shipped
+        backlog_path[:, m, :] = backlog
         cum_consumed += shipped @ usage.T
+        site_load[:, :, m] = (site_cap[:, :, m] - site_rem) * integ_scale[:, None]
+        limit_units[0, :, m] = want - after_comp
+        limit_units[1, :, m] = after_comp - after_cap
+        limit_units[2, :, m] = after_cap - shipped
         comp_short[:, m] = (want - after_comp).sum(axis=1)
         cap_short[:, m] = (after_comp - shipped).sum(axis=1)
 
@@ -362,11 +384,13 @@ def run_simulation(data: InputData, config: AppConfig, baseline: BaselineResult,
     # ------------------------------------------------------------------
     # 5. Revenue recognition (with acceptance / site-readiness slip)
     # ------------------------------------------------------------------
+    # calibrated slip odds scale with the shock; a lever's added slip stays
     accept_delay_p = np.clip(
-        pa.family_accept_prob_delay[None, :] + p["acceptance_delay_add"]
-        + (1 - pa.site_readiness[None, :]), 0, 0.9)                    # (1, F)
+        (pa.family_accept_prob_delay[None, :] + (1 - pa.site_readiness[None, :]))
+        * sh.acceptance_slip + p["acceptance_delay_add"], 0, 0.9)
     slip_frac = accept_delay_p[None, :, :] * np.ones((n_sims, 1, 1))
     slip_noise = np.clip(rng.beta(4, 6, size=(n_sims, 1, 1)) * 2.0, 0.3, 1.7)
+    slip_noise = 1.0 + sh.acceptance_slip * (slip_noise - 1.0)
     slip_frac = np.clip(slip_frac * slip_noise, 0, 0.9)
 
     rec = np.zeros_like(ship)
@@ -391,26 +415,25 @@ def run_simulation(data: InputData, config: AppConfig, baseline: BaselineResult,
     if progress_cb:
         progress_cb(0.8, "Translating to financial outcomes")
     asp_shock = rng.standard_normal((n_sims, 1, n_f))
-    asp_mult = _lognormal_mult(asp_shock, unc.asp_sigma) * p["asp_mult"]
+    pc = sh.price_cost
+    asp_mult = _lognormal_mult(asp_shock, unc.asp_sigma * pc) * p["asp_mult"]
     revenue_fm = rec * pa.family_asp[None, None, :] * asp_mult
     revenue = revenue_fm.sum(axis=2)
 
-    ppv_mult = _lognormal_mult(rng.standard_normal((n_sims, 1)), unc.material_cost_sigma)
-    fx_mult = _lognormal_mult(rng.standard_normal((n_sims, 1)), unc.fx_cost_sigma)
+    ppv_mult = _lognormal_mult(rng.standard_normal((n_sims, 1)), unc.material_cost_sigma * pc)
+    fx_mult = _lognormal_mult(rng.standard_normal((n_sims, 1)), unc.fx_cost_sigma * pc)
     tight_cost = 1 + 0.02 * np.clip(tight_shock, 0, None)              # tight supply raises cost
     material_mult = ppv_mult * fx_mult * tight_cost * p["material_cost_mult"]  # (n, M)
-    conv_mult = _lognormal_mult(rng.standard_normal((n_sims, 1)), unc.conversion_cost_sigma)
-    freight_mult = (_lognormal_mult(rng.standard_normal((n_sims, 1)), unc.freight_sigma)
+    conv_mult = _lognormal_mult(rng.standard_normal((n_sims, 1)), unc.conversion_cost_sigma * pc)
+    freight_mult = (_lognormal_mult(rng.standard_normal((n_sims, 1)), unc.freight_sigma * pc)
                     * p["freight_mult"]
                     * (1 + 0.08 * np.clip(logistics_shock, 0, None)))
 
+    # one unit-cost policy: the same standard build-up values COGS and FG
+    uc = standard_unit_cost(data, fams, fpy_base)
+    mat_c, conv_c, integ_c = uc["material"], uc["conversion"], uc["integration"]
+    freight_c, warr_c, scrap_c = uc["freight"], uc["warranty"], uc["scrap"]
     prod = data.products.set_index("product_family").loc[fams]
-    mat_c = prod["material_cost_usd"].to_numpy(float)
-    conv_c = prod["ems_conversion_cost_usd"].to_numpy(float)
-    integ_c = prod["integration_test_cost_usd"].to_numpy(float)
-    freight_c = prod["freight_cost_usd"].to_numpy(float)
-    warr_c = prod["warranty_reserve_usd"].to_numpy(float)
-    scrap_c = (prod["scrap_prob"] * prod["material_cost_usd"]).to_numpy(float)
 
     cogs = (rec * mat_c[None, None, :]).sum(axis=2) * material_mult \
         + (rec * conv_c[None, None, :]).sum(axis=2) * conv_mult \
@@ -418,13 +441,12 @@ def run_simulation(data: InputData, config: AppConfig, baseline: BaselineResult,
         + (rec * freight_c[None, None, :]).sum(axis=2) * freight_mult \
         + (rec * (warr_c + scrap_c)[None, None, :]).sum(axis=2)
 
-    rework_units = ship.sum(axis=2) * (1 - fpy_eff)
-    rework_cost = rework_units * 0.5 * float(conv_c.mean())
+    # rework: units failing first pass are reworked at half conversion cost
+    rework_cost = (ship * (0.5 * conv_c)[None, None, :]).sum(axis=2) * (1 - fpy_eff)
     # overtime conversion premium: std-units produced above base capacity carry
     # the weighted-average overtime premium on EMS conversion cost
     if p["overtime_fraction"] > 0:
-        adj_base_cap = base_cap_total * adherence_eff
-        ot_used_std = np.clip(ems_load_std - adj_base_cap, 0, None)
+        ot_used_std = np.clip(ems_load_std - base_cap_total, 0, None)
         # overtime-capacity-weighted average of each site's contracted premium
         # (overtime_premium_pct in the EMS site table)
         ot_weights = pa.site_overtime.mean(axis=1)
@@ -445,8 +467,11 @@ def run_simulation(data: InputData, config: AppConfig, baseline: BaselineResult,
     ebitda = operating_income + fin.depreciation_monthly_usd
 
     # inventory: critical-component RM + non-critical RM + WIP + FG awaiting acceptance
+    # critical stock is valued as physically held: on-hand plus receipts less
+    # consumption, including the safety stock that is not usable for builds
     cum_consumed_path = _cum_consumed_path(ship, usage)                # (n, M, C)
-    stock_path = np.clip(comp_avail - cum_consumed_path, 0, None)     # (n, M, C)
+    stock_path = np.clip(pa.comp_on_hand[None, None, :] + np.cumsum(received, axis=1)
+                         - cum_consumed_path, 0, None)                 # (n, M, C)
     # purchasing response: buyers defer/reschedule roughly half of any stock
     # beyond two months of forward requirement, damping runaway inventory
     monthly_req_units = pa.comp_usage @ pa.demand_units.mean(axis=0)   # (C,)
@@ -457,8 +482,7 @@ def run_simulation(data: InputData, config: AppConfig, baseline: BaselineResult,
     rm = rm_crit + 0.9 * mat_spend
     cycle = prod["build_cycle_months"].to_numpy(float)
     wip = (ship * ((mat_c + conv_c) * cycle * 0.6)[None, None, :]).sum(axis=2)
-    unit_cogs_std = mat_c + conv_c + integ_c + freight_c + warr_c
-    fg = np.clip(np.cumsum(ship - rec, axis=1), 0, None) @ unit_cogs_std
+    fg = np.clip(np.cumsum(ship - rec, axis=1), 0, None) @ uc["standard"]
     inventory = rm + wip + fg
 
     ar = revenue * fin.dso_days / 30.0
@@ -512,6 +536,12 @@ def run_simulation(data: InputData, config: AppConfig, baseline: BaselineResult,
         capacity_shortfall_units=cap_short, component_short_units=comp_short,
         component_binding=comp_binding, site_disrupted=site_disrupted,
         drivers=drivers, params=p,
+        family_backlog=backlog_path, site_load=site_load, site_capacity=site_cap,
+        integration_capacity=integ_cap, limit_units=limit_units,
+        binding_component=binding_comp,
+        component_consumed=(np.einsum("nmf,cf->nmc", ship, usage)
+                            if keep_component_paths else None),
+        component_usable_supply=comp_avail if keep_component_paths else None,
     )
 
 

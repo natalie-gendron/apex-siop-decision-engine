@@ -209,10 +209,6 @@ def test_higher_safety_stock_does_not_reduce_service(sim):
     assert service_level(ss).mean() >= service_level(base).mean()
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "src/simulation.py section 6: raw inventory is stock_path = comp_avail "
-    "- consumption, and comp_avail already excludes safety_floor; a higher "
-    "safety-stock policy therefore LOWERS reported raw inventory"))
 def test_higher_safety_stock_raises_average_raw_inventory(sim):
     base = sim("base")
     ss = sim("safety_stock_x2", safety_stock_mult=2.0)
@@ -280,12 +276,6 @@ def test_simulation_reports_revenue_by_customer(sim, data):
     np.testing.assert_allclose(by_cust.sum(axis=-1), r.revenue, rtol=1e-6)
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "Two engines: src/baseline_plan.py run_baseline (customer priority "
-    "queue) vs src/simulation.py run_simulation (family aggregates, "
-    "proportional rationing, factor-driven delay_frac and utilization "
-    "adherence penalty that remain with every sigma zeroed). Zero-shock FY "
-    "revenue is about 7% below the baseline"))
 def test_zero_shock_simulation_reconciles_to_baseline(sim, config, baseline):
     """One engine: with shocks switched off the simulation reproduces the
     deterministic baseline FY revenue within 1%."""

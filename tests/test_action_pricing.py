@@ -12,7 +12,7 @@ import pytest
 
 from src.market_intelligence import CONFIDENCE_SIM_PARAMS, merge_confidence_params
 from src.recommendations import build_recommendations
-from src.scenarios import kpi_summary, management_actions
+from src.scenarios import kpi_summary, management_actions, prebuilt_scenarios
 from src.sensitivity import binding_components
 from src.simulation import run_simulation
 
@@ -71,22 +71,50 @@ def test_inert_actions_show_zero_q1_delta_at_equal_paths(ref_700, actions_700):
             f"equal-count reference")
 
 
+# a stressed world in which the sample actions clear the recommendation
+# gates (in the base world of the one engine no revenue risk fires, so an
+# empty recommendation list would make the test below vacuous)
+STRESS_WORLD = "AI Surge with Supply Tightening"
+
+
+@pytest.fixture(scope="module")
+def stressed(data, config, baseline):
+    """(headline 1,500-path result, 700-path reference KPI, 700-path action
+    KPIs), all in STRESS_WORLD."""
+    world = prebuilt_scenarios()[STRESS_WORLD].overrides
+    headline = run_simulation(data, config, baseline, params=world,
+                              n_sims=1500, seed=42, scenario_name=STRESS_WORLD)
+    ref = kpi_summary(run_simulation(data, config, baseline, params=world,
+                                     n_sims=700, seed=42,
+                                     scenario_name="reference"),
+                      baseline, config)
+    catalog = management_actions()
+    actions = {}
+    for name in INERT_IN_Q1 + ["Authorize overtime at EMS sites"]:
+        spec = catalog[name]
+        r = run_simulation(data, config, baseline,
+                           params=merge_confidence_params(world, spec.overrides),
+                           n_sims=700, seed=42, scenario_name=name)
+        actions[name] = (kpi_summary(r, baseline, config), spec)
+    return headline, ref, actions
+
+
 def test_recommendation_deltas_use_equal_count_reference(
-        config, baseline, base_result, ref_700, actions_700):
+        config, baseline, stressed):
     """build_recommendations must difference action KPIs against ref_kpi
     (equal path count), not the headline base_kpi, when the two differ."""
-    base_kpi = kpi_summary(base_result, baseline, config)  # 1,500 paths
-    binding = binding_components(base_result)
-    recs = build_recommendations(base_kpi, actions_700, binding,
-                                 ref_kpi=ref_700)
+    headline, ref, actions = stressed
+    base_kpi = kpi_summary(headline, baseline, config)  # 1,500 paths
+    binding = binding_components(headline)
+    recs = build_recommendations(base_kpi, actions, binding, ref_kpi=ref)
     assert recs, "expected at least one recommendation from the sample set"
     for rec in recs:
-        kpi, spec = actions_700[rec.title]
+        kpi, spec = actions[rec.title]
         expected_ev = (kpi["fy_gross_profit"]["mean"]
-                       - ref_700["fy_gross_profit"]["mean"]
+                       - ref["fy_gross_profit"]["mean"]
                        - spec.action_cost_usd)
         assert rec.expected_value_usd == pytest.approx(expected_ev)
         # inert-in-Q1 actions must not be credited with a Q1 probability gain
         if rec.title in INERT_IN_Q1:
-            d_q1 = kpi["p_q1_plan"] - ref_700["p_q1_plan"]
+            d_q1 = kpi["p_q1_plan"] - ref["p_q1_plan"]
             assert abs(d_q1) <= 0.001
