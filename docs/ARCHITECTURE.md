@@ -246,6 +246,12 @@ Executive answer first, then the meeting's supporting flow:
   were valued about 2.3x), and had no owner or data source. Each site runs at
   its own scheduled adherence. If an owner shows adherence erodes with load,
   it enters as an owned input, not a hidden derate.
+- **One variable map** (2026-09). `src/variable_map.py` lists every input
+  that can change a result, by layer (volatility, event rate, shock switch,
+  lever, financial, engine constant), with where it lives, its owner and the
+  outputs it moves. Shown on Assumptions & Data; `tests/test_variable_map.py`
+  fails if a lever, shock, config setting or engine-read data column is
+  missing. Engine constants have no owner yet and are the calibration list.
 - **Final integration happens at the EMS** (2026-09). It is part of EMS
   site capacity, not a separate stage; the in-house integration pool and its
   two actions (temporary capacity, headcount) are retired, since their

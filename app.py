@@ -51,6 +51,7 @@ from src.sensitivity import (
 from src.simulation import run_simulation
 from src.utils import MARKET_SEGMENTS, fmt_money, fmt_pct, fmt_pts, month_labels
 from src.validation import validate_inputs
+from src.variable_map import LAYERS, variable_map
 from src import visualizations as viz
 
 st.set_page_config(page_title="Apex SIOP Decision Engine", page_icon="📊",
@@ -1289,6 +1290,20 @@ with tabs[8]:
 
 # ---------------------------- 9. Assumptions & Data ------------------------
 with tabs[9]:
+    st.markdown("#### Variable map: everything that can change a result")
+    st.caption("Every input the simulation reads, from how uncertain the world "
+               "is (volatility, event rates) to what Apex chooses to do "
+               "(levers). Engine constants are hard-coded assumptions with no "
+               "owner yet: calibration candidates. Which of these actually "
+               "moved the result in this run is on the Risk Drivers tab. "
+               "Source: src/variable_map.py (a test keeps it complete).")
+    vmap = variable_map()
+    layer_pick = st.radio("Layer", ["All"] + LAYERS, horizontal=True,
+                          key="variable_map_layer", label_visibility="collapsed")
+    if layer_pick != "All":
+        vmap = vmap[vmap["Layer"] == layer_pick]
+    st.dataframe(vmap, width='stretch', hide_index=True, height=360)
+
     st.markdown("#### Financial plan & targets")
     fin = CONFIG.financial
     st.dataframe(pd.DataFrame({
