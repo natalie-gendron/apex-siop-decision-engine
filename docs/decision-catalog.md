@@ -35,7 +35,7 @@ comparison and recommendation); "baseline" is `src/baseline_plan.py::run_baselin
    actions have no recurring cost, and ranking uses EV = delta gross profit
    minus action cost (`src/recommendations.py::build_recommendations`), which
    ignores cash, working capital and E&O.
-5. **Final integration is modeled in-house.** A separate integration stage
+5. **Resolved 2026-09 (build step 2): integration folded into EMS capacity.** **Final integration is modeled in-house.** A separate integration stage
    with calibration, FAT and install capacity (`_integration`,
    `integ_cap` in `run_simulation`) contradicts the target business, where
    integration happens at the EMS.
@@ -283,7 +283,7 @@ comparison and recommendation); "baseline" is `src/baseline_plan.py::run_baselin
    push-out, cancel)** with a deterministic run (D7, D9).
 6. **Independent alternate sources and sites with their own risk, cost and
    capacity** (D5, partly D2).
-7. **Remove the in-house integration stage** and fold integration into EMS
+7. **Done (build step 2).** **Remove the in-house integration stage** and fold integration into EMS
    capacity (affects D1, D2 answers; model simplification, not addition).
 
 Explicitly not on the list: FPY driving output (FPY affects cost only today

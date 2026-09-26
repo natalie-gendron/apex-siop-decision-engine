@@ -11,10 +11,10 @@ financial answer.
 
 | Lever / mechanism | Expected behavior | Status today | Code cause (`src/simulation.py`) | Changes a financial answer? | Recommendation |
 |---|---|---|---|---|---|
-| Demand +20%, EMS binding | Shipments rise less than demand; past-due rises; service falls | pass | n/a | Yes: revenue, service, expedite cost | Keep. (Before step 1, FY revenue fell under +20% demand because the utilization adherence penalty eroded output; the penalty is removed) |
+| Demand +20%, EMS binding | Shipments rise less than demand; past-due rises; service falls | pass (EMS tightened 10% in the test so it binds; base-world EMS binds in one FY month) | n/a | Yes: revenue, service, expedite cost | Keep. (Before step 1, FY revenue fell under +20% demand because the utilization adherence penalty eroded output; the penalty is removed) |
 | Demand -20% | Component inventory and E&O rise | pass | n/a (flat receipts make this happen) | Yes: inventory, E&O, cash | Keep, but see purchasing response below: the size of the effect is overstated |
 | Price (ASP) +10% | Revenue +10%; units and COGS unchanged | pass | n/a | Yes: revenue, GM | Keep |
-| Relieve EMS capacity | Output rises, then plateaus as the next constraint binds | pass | n/a | Yes: value of capacity actions | Keep. The next constraint is in-house integration capacity (`integ_cap`), but final integration happens at the EMS. Fold integration into EMS site capacity, or relabel it as EMS test/integration |
+| Relieve EMS capacity | Output rises, then plateaus as the next constraint binds | pass | n/a | Yes: value of capacity actions | Keep. Since build step 2 integration is part of EMS capacity, and the next constraint is critical components; the test asserts that |
 | Overtime | Shipments and conversion cost (COGS per unit) rise | pass | n/a | Yes: revenue vs premium | Keep |
 | First-pass yield down | Rework uses EMS capacity, so shipments fall when capacity binds | xfail | `fpy_eff` only feeds `rework_cost`; never touches `site_cap` or `shipped` | Yes: at 86% EMS utilization, lost output is worth far more than rework cost | Make it propagate: scale effective site capacity by yield |
 | Lead time longer | Supply response is delayed, so shortage rises when demand increases | xfail | `lead_time_mult` only raises `delay_frac` (one-month slip); a bigger delayed pool means more expediting, so shortage **falls** | Yes: the lever gives the wrong sign on revenue | Make it propagate together with the purchasing response. Until then, remove it from decision UIs |

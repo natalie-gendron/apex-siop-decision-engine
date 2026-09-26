@@ -4,7 +4,7 @@ A working Version-1 prototype of an executive decision-support system for the
 monthly SIOP (Sales, Inventory & Operations Planning) cycle of a fictional
 automated test equipment (ATE) manufacturer, **Apex Test Systems**. It connects
 operating uncertainty — demand cycles, customer push-outs, component shortages,
-EMS capacity, integration throughput, acceptance timing — to the financial
+EMS capacity (final integration and test included), acceptance timing — to the financial
 outcomes a COO, a VP of Global Operations Finance and a Director of SIOP
 actually manage: revenue attainment probability, gross margin, inventory,
 working capital and cash.
@@ -113,8 +113,8 @@ One engine: the baseline supply plan is `run_simulation` with
 `Shocks.zero()` and one path (`src/shocks.py`), so plan and simulation cannot
 disagree. Builds go only to qualified EMS sites (least-contested site first,
 then cost); component availability, EMS capacity (derated by each site's
-schedule adherence and labor) and final-integration capacity are hard
-constraints. Unmet demand rolls forward and ages; each unit that misses its
+schedule adherence and labor; final integration and test happen at the EMS)
+are hard constraints. Unmet demand rolls forward and ages; each unit that misses its
 requested month is logged once with the constraint that cut it. No cross-month
 optimization.
 
@@ -133,7 +133,7 @@ optimization.
 - **Modeled uncertainty:** market and customer demand, pull-ins/push-outs/
   cancellations, ASP, component receipts/lateness/disruption/allocation,
   expedite recovery and premiums, EMS capacity/labor/adherence/yield/regional
-  disruption, integration capacity,
+  disruption,
   acceptance and site-readiness delays, cost variances.
 - **Granularity:** family x month with all 30 components and site
   capacities, rationing scarce supply proportionally within a family. With
@@ -167,7 +167,7 @@ their scoring weights (EV 35%, probability 30%, revenue 20%, cash −15%).
 ## Test results
 
 `pytest` — **69 passed** (data reproducibility & validity, baseline
-feasibility vs component/EMS/integration constraints, financial identities,
+feasibility vs component and EMS constraints, financial identities,
 simulation reproducibility & bounds, correlation PSD & co-movement, all 8
 scenarios run, comparison reconciliation, equal-path-count action pricing,
 recommendation traceability & materiality, dynamic summary — including the

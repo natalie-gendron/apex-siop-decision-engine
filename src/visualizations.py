@@ -13,6 +13,7 @@ import plotly.graph_objects as go
 from .models import BaselineResult, SimulationResult
 from .simulation import quarterly
 from .utils import (
+    EMS_SITES,
     PRODUCT_FAMILIES,
     fmt_money,
     month_labels,
@@ -293,12 +294,14 @@ def scenario_comparison_chart(rows: list[dict]) -> go.Figure:
 
 def utilization_heatmap(result: SimulationResult,
                         title_suffix: str = "") -> go.Figure:
-    """EMS + integration expected utilization by month."""
+    """Expected EMS utilization by month: network and each site (final
+    integration and test happen at the EMS)."""
     m = month_labels()
-    rows = {
-        "EMS network": result.ems_utilization.mean(axis=0),
-        "Final integration": result.integration_utilization.mean(axis=0),
-    }
+    rows = {"EMS network": result.ems_utilization.mean(axis=0)}
+    if result.site_load is not None:
+        util = result.site_load / np.clip(result.site_capacity, 1e-9, None)
+        for s, site in enumerate(EMS_SITES):
+            rows[site] = util[:, s, :].mean(axis=0)
     z = np.vstack(list(rows.values()))
     fig = go.Figure(go.Heatmap(
         z=z * 100, x=m, y=list(rows.keys()),

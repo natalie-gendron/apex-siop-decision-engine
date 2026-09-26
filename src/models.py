@@ -17,7 +17,7 @@ class InputData:
     components: pd.DataFrame      # critical component master
     ems_capacity: pd.DataFrame    # EMS site x month capacity assumptions
     ems_sites: pd.DataFrame       # EMS site master
-    integration_capacity: pd.DataFrame  # integration site x month
+    integration_capacity: pd.DataFrame  # integration site x month (not read: integration is at the EMS)
     financial_plan: pd.DataFrame  # month-level revenue plan and targets
     seed: int = 42
 
@@ -31,7 +31,6 @@ class BaselineResult:
     family_revenue: pd.DataFrame     # recognized revenue, family x month
     site_load: pd.DataFrame          # EMS site x month builds (std-equivalent)
     site_capacity: pd.DataFrame      # EMS site x month available capacity
-    integration_load: pd.DataFrame   # integration site x month load vs capacity
     component_usage: pd.DataFrame    # component x month consumption vs supply
     constraints: pd.DataFrame        # constraint log (month, type, detail, units lost)
     unmet: pd.DataFrame              # unmet demand by family x month
@@ -70,7 +69,6 @@ class SimulationResult:
     units_shipped: np.ndarray        # (n_sims, n_months)
     units_demanded: np.ndarray       # (n_sims, n_months)
     ems_utilization: np.ndarray      # (n_sims, n_months)
-    integration_utilization: np.ndarray
     capacity_shortfall_units: np.ndarray   # (n_sims, n_months)
     component_short_units: np.ndarray      # (n_sims, n_months)
     component_binding: dict[str, np.ndarray] = field(default_factory=dict)  # name -> (n_sims,) bool
@@ -81,8 +79,7 @@ class SimulationResult:
     family_backlog: np.ndarray | None = None   # (n, M, F) end-of-month unmet (past-due)
     site_load: np.ndarray | None = None        # (n, S, M) std-units built per EMS site
     site_capacity: np.ndarray | None = None    # (n, S, M) effective std-unit capacity
-    integration_capacity: np.ndarray | None = None  # (n, M)
-    limit_units: np.ndarray | None = None      # (3, n, M, F) cut by component / EMS / integration
+    limit_units: np.ndarray | None = None      # (2, n, M, F) cut by component / EMS capacity
     binding_component: np.ndarray | None = None  # (n, M, F) index of ceiling component, -1 none
     component_consumed: np.ndarray | None = None  # (n, M, C) units consumed per month
     component_usable_supply: np.ndarray | None = None  # (n, M, C) cumulative usable supply

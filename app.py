@@ -278,7 +278,6 @@ if scenario_name == "Custom Scenario":
         emsc = st.slider("EMS capacity multiplier", 0.7, 1.3, 1.0, 0.02)
         fpy = st.slider("EMS yield delta (pts)", -0.08, 0.05, 0.0, 0.01)
         adh = st.slider("Schedule adherence delta (pts)", -0.08, 0.04, 0.0, 0.01)
-        integ = st.slider("Integration capacity multiplier", 0.8, 1.3, 1.0, 0.02)
         freight = st.slider("Freight cost multiplier", 0.8, 2.0, 1.0, 0.05)
         exp_p = st.slider("Expedite premium multiplier", 0.5, 2.5, 1.0, 0.1)
         acc = st.slider("Acceptance delay probability (+pts)", 0.0, 0.3, 0.0, 0.02)
@@ -291,7 +290,6 @@ if scenario_name == "Custom Scenario":
             ("cancel_prob_mult", cancel, 1.0), ("asp_mult", aspm, 1.0),
             ("lead_time_mult", lt, 1.0), ("comp_disrupt_mult", dis, 1.0),
             ("fpy_delta", fpy, 0.0), ("adherence_delta", adh, 0.0),
-            ("integration_capacity_mult", integ, 1.0),
             ("freight_mult", freight, 1.0), ("expedite_premium_mult", exp_p, 1.0),
             ("acceptance_delay_add", acc, 0.0),
         ]:
@@ -1017,7 +1015,6 @@ with tabs[5]:
            if c.startswith("units_")},
         "gross_margin": "{:.1%}",
         "ems_utilization": "{:.1%}",
-        "integration_utilization": "{:.1%}",
     }
     st.dataframe(baseline.monthly.style.format(monthly_fmt),
                  width='stretch', height=320)
@@ -1512,7 +1509,7 @@ engine run with every shock switched off, on a single path. It cannot
 disagree with the simulation on allocation, cost or inventory. Builds go only
 to qualified EMS sites (least-contested site first, then cost) and respect
 component availability, EMS capacity (derated by each site's scheduled
-adherence and labor), and final integration capacity. Unmet demand rolls
+adherence and labor; final integration and test happen at the EMS). Unmet demand rolls
 forward and ages; each unit that misses its requested month is logged once
 against the constraint that cut it. The allocation does not optimize across
 months; a MILP is a documented Version-2 candidate.

@@ -47,7 +47,7 @@ Horizon: 18 monthly buckets. Refresh cadence assumes a monthly SIOP cycle with a
 | Qualification matrix | family x EMS site (with effective date) | On change | Operations Engineering | `products.qualified_ems_sites` | Used (`ems_sites.eligible_families` duplicate is unused) |
 | Schedule adherence, labor availability, first-pass yield | EMS site x month | Monthly | EMS scorecards | `ems_capacity.schedule_adherence`, `.labor_availability`, `.first_pass_yield` | Used |
 | Build cycle time | family (x site) | Quarterly | Planning | `products.build_cycle_months` | Used (WIP value); `ems_capacity.cycle_time_weeks` Generated but unused |
-| Final integration and test capacity at EMS | EMS site x month | Monthly | EMS Program Mgmt | `integration_capacity.integration_capacity_units` (modeled as two in-house sites) | Used, but structurally wrong: target business integrates at the EMS, so this should fold into EMS capacity or become a per-site test-cell constraint |
+| Final integration and test capacity at EMS | EMS site x month | Monthly | EMS Program Mgmt | `integration_capacity.integration_capacity_units` | Generated but unused since 2026-09: integration is folded into EMS site capacity. If a site's test cells bind separately from build capacity, add a per-site test-cell cap from EMS Program Mgmt |
 | Installation capacity | region x month | Monthly | Field Service | `integration_capacity.installation_capacity_units` | Generated but unused (removed from the engine, 2026-09: never enforced, and not a target constraint) |
 | Allocation / priority rules | rule set | On change | SIOP leadership | none (one engine, proportional within family; selectable policy planned in build step 3) | Missing |
 | Constrained supply plan (if solved) | family x site x month, pegged to customer | Weekly | Planning | none (APEX solves its own rough cut) | Missing, unconfirmed whether it exists |
@@ -118,7 +118,7 @@ Verified by `grep -rnw` over all `*.py` outside `src/data_generator.py` and `tes
 | `components` | `min_order_qty`, `lead_time_std_weeks`, `alt_source_available`, `alt_source_qual_months`, `category` |
 | `ems_sites` | `capacity_reservation_fee_usd`, `min_production_lot`, `max_ramp_pct_per_month`, `quality_escape_prob`, `cost_variability_pct`, `logistics_lead_time_weeks`, `eligible_families` (only displayed as a raw table in `app.py`) |
 | `ems_capacity` | `reserved_capacity_units`, `flexible_capacity_units`, `cycle_time_weeks`, `rework_rate`, `scrap_rate` |
-| `integration_capacity` | `calibration_capacity_units`, `first_pass_completion`, `rework_days`, `customer_acceptance_weeks`, `shipping_lanes`, `eligible_families` |
+| `integration_capacity` | whole table (not read by the engine since 2026-09); previously also `calibration_capacity_units`, `first_pass_completion`, `rework_days`, `customer_acceptance_weeks`, `shipping_lanes`, `eligible_families` |
 | `config.financial` | `revenue_plan_buffer` (declared in `src/config.py:32`, never passed to `generate_all`, which defaults `plan_buffer=0.86`) |
 
 **Read, but only outside the financial engine:**

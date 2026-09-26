@@ -5,8 +5,9 @@ One engine. The deterministic baseline supply plan is this function run with
 second allocator and no second financial translation.
 
 Granularity: demand by product family and month, EMS capacity by site, supply
-for all 30 critical components, integration capacity, and the financial
-translation. Within each month, scarce components and integration capacity are
+for all 30 critical components, and the financial translation. Final
+integration and test is performed at the EMS, so it is part of EMS site
+capacity, not a separate stage. Within each month, scarce components are
 rationed proportionally within a family; EMS capacity is water-filled across
 sites, least-contested site first, then cheapest.
 
@@ -60,9 +61,7 @@ def default_params() -> dict[str, Any]:
         "overtime_fraction": 0.0,        # fraction of max overtime authorized
         "overtime_start_month": 0,       # overtime effective from this month (decision latency)
         "add_qualification": [],         # [(site, family, start_month)] new EMS qualifications
-        # integration / acceptance
-        "integration_capacity_mult": 1.0,
-        "integration_capacity_ramp": None,  # (start_month, multiplier) delayed capacity add
+        # acceptance
         "acceptance_delay_add": 0.0,     # added probability that revenue slips a month
         # finance
         "freight_mult": 1.0,
@@ -239,10 +238,10 @@ def run_simulation(data: InputData, config: AppConfig,
         + np.cumsum(received, axis=1)                                  # usable cumulative supply
 
     # ------------------------------------------------------------------
-    # 3. EMS + integration capacity
+    # 3. EMS capacity (final integration and test happen at the EMS)
     # ------------------------------------------------------------------
     if progress_cb:
-        progress_cb(0.45, "Simulating EMS and integration capacity")
+        progress_cb(0.45, "Simulating EMS capacity")
     ems_shock = engine.shock("EMS execution", factors, rng) * sh.ems_execution  # (n, M)
     labor_mult = np.clip(_lognormal_mult(ems_shock, unc.ems_labor_sigma), 0.7, 1.1)
 
@@ -275,13 +274,6 @@ def run_simulation(data: InputData, config: AppConfig,
         cap = cap + p["overtime_fraction"] * pa.site_overtime[s][None, :] * ot_mask[None, :]
         site_cap[:, s, :] = np.clip(cap, 0, None) * adherence[s][None, :]
 
-    integ_mult_path = np.full(M, p["integration_capacity_mult"])
-    if p["integration_capacity_ramp"]:
-        ramp_start, ramp_mult = p["integration_capacity_ramp"]
-        integ_mult_path[ramp_start:] *= ramp_mult
-    integ_cap = (pa.integration_capacity[None, :] * integ_mult_path[None, :]
-                 * np.clip(labor_mult, 0.8, 1.05))
-
     # first-pass yield drives rework cost (output effect: propagation spec)
     fpy_base = float((pa.site_fpy * pa.site_capacity).sum() / pa.site_capacity.sum())
     fpy_eff = np.clip(fpy_base + p["fpy_delta"]
@@ -311,7 +303,7 @@ def run_simulation(data: InputData, config: AppConfig,
     cap_short = np.zeros((n_sims, M))
     comp_binding_count = np.zeros((n_sims, n_c))
     site_load = np.zeros((n_sims, n_s, M))         # std-units actually built
-    limit_units = np.zeros((3, n_sims, M, n_f))    # cut by component / EMS / integration
+    limit_units = np.zeros((2, n_sims, M, n_f))    # cut by component / EMS capacity
     binding_comp = np.full((n_sims, M, n_f), -1)   # component that set each family's ceiling
     usage = pa.comp_usage                                              # (C, F)
     fam_uses = [usage[:, f] > 0 for f in range(n_f)]
@@ -358,28 +350,21 @@ def run_simulation(data: InputData, config: AppConfig,
                 after_cap += give_std / pa.family_complexity[None, :]
                 site_rem[:, s] -= give_std.sum(axis=1)
                 unmet_std = np.clip(unmet_std - give_std, 0, None)
-        after_cap = np.minimum(after_cap, after_comp)
-
-        # integration capacity: proportional company-level scale
-        total_after = after_cap.sum(axis=1)
-        integ_scale = np.minimum(1.0, integ_cap[:, m] / np.clip(total_after, 1e-9, None))
-        shipped = after_cap * integ_scale[:, None]
+        shipped = np.minimum(after_cap, after_comp)
 
         ship[:, m, :] = shipped
         backlog = want - shipped
         backlog_path[:, m, :] = backlog
         cum_consumed += shipped @ usage.T
-        site_load[:, :, m] = (site_cap[:, :, m] - site_rem) * integ_scale[:, None]
+        site_load[:, :, m] = site_cap[:, :, m] - site_rem
         limit_units[0, :, m] = want - after_comp
-        limit_units[1, :, m] = after_comp - after_cap
-        limit_units[2, :, m] = after_cap - shipped
+        limit_units[1, :, m] = after_comp - shipped
         comp_short[:, m] = (want - after_comp).sum(axis=1)
         cap_short[:, m] = (after_comp - shipped).sum(axis=1)
 
     ems_load_std = (ship * pa.family_complexity[None, None, :]).sum(axis=2)
     total_cap = site_cap.sum(axis=1)
     ems_util = ems_load_std / np.clip(total_cap, 1e-9, None)
-    integ_util = ship.sum(axis=2) / np.clip(integ_cap, 1e-9, None)
 
     # ------------------------------------------------------------------
     # 5. Revenue recognition (with acceptance / site-readiness slip)
@@ -532,12 +517,12 @@ def run_simulation(data: InputData, config: AppConfig,
         family_revenue=revenue_fm, family_units=rec,
         family_shipped=ship, family_demand=demand,
         units_shipped=ship.sum(axis=2), units_demanded=demand.sum(axis=2),
-        ems_utilization=ems_util, integration_utilization=integ_util,
+        ems_utilization=ems_util,
         capacity_shortfall_units=cap_short, component_short_units=comp_short,
         component_binding=comp_binding, site_disrupted=site_disrupted,
         drivers=drivers, params=p,
         family_backlog=backlog_path, site_load=site_load, site_capacity=site_cap,
-        integration_capacity=integ_cap, limit_units=limit_units,
+        limit_units=limit_units,
         binding_component=binding_comp,
         component_consumed=(np.einsum("nmf,cf->nmc", ship, usage)
                             if keep_component_paths else None),

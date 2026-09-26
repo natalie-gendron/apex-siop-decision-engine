@@ -1,8 +1,8 @@
 """Operational planning aggregates shared by the baseline plan and the simulator.
 
 Converts the generated input tables into dense numpy structures:
-demand by family/month, EMS capacity by site/month, component supply pipelines,
-and integration capacity. All units follow the input tables; EMS capacity uses
+demand by family/month, EMS capacity by site/month (final integration and test
+included), and component supply pipelines. All units follow the input tables; EMS capacity uses
 "standard-equivalent systems" where a family's configuration complexity weights
 its capacity consumption.
 """
@@ -41,7 +41,6 @@ class PlanningArrays:
     site_ot_premium: np.ndarray       # (n_sites,) overtime premium as % of conversion cost
     site_disrupt_prob: np.ndarray     # (n_sites,)
     site_qual: np.ndarray             # (n_sites, n_fam) 1 if family qualified
-    integration_capacity: np.ndarray  # (n_months,) total systems/month across sites
     comp_names: list[str]
     comp_on_hand: np.ndarray          # (n_comp,)
     comp_po_monthly: np.ndarray       # (n_comp,)
@@ -115,11 +114,6 @@ def build_planning_arrays(data: InputData) -> PlanningArrays:
         for s in qualified:
             site_qual[s_ix[s], fam_ix[fam]] = 1.0
 
-    integ = data.integration_capacity
-    integration_capacity = np.zeros(N_MONTHS)
-    for _, r in integ.iterrows():
-        j = m_ix[r["month"]]
-        integration_capacity[j] += r["integration_capacity_units"] * r["labor_availability"]
 
     comp = data.components
     comp_usage = np.zeros((len(comp), n_f))
@@ -144,7 +138,6 @@ def build_planning_arrays(data: InputData) -> PlanningArrays:
         site_labor=site_labor, site_fpy=site_fpy, site_cost=site_cost,
         site_ot_premium=site_ot_premium,
         site_disrupt_prob=site_disrupt, site_qual=site_qual,
-        integration_capacity=integration_capacity,
         comp_names=comp["component"].tolist(),
         comp_on_hand=comp["on_hand_units"].to_numpy(float),
         comp_po_monthly=comp["open_po_units_per_month"].to_numpy(float),

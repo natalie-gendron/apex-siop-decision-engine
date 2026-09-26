@@ -23,7 +23,6 @@ INERT_IN_Q1 = [
     "Dual-source the high-end FPGA",              # supply ramp from month 7
     "Commit long-lead component orders",          # receipts months 7+
     "Qualify EMS Eastern Europe for Zenith Compute",  # usable from month 10
-    "Expand final-integration headcount",         # capacity from month 7
 ]
 
 

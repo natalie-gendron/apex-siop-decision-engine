@@ -13,11 +13,6 @@ def test_supply_never_exceeds_site_capacity(data, baseline):
     assert (load <= cap + 1e-6).all()
 
 
-def test_supply_never_exceeds_integration_capacity(baseline):
-    il = baseline.integration_load
-    assert (il["load_units"] <= il["capacity_units"] + 1e-6).all()
-
-
 def test_component_consumption_within_supply(baseline):
     cu = baseline.component_usage
     assert (cu["cumulative_consumed_units"]

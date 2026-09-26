@@ -169,9 +169,9 @@ class RulesBasedNarrative(NarrativeProvider):
                     f"{risky['p_capacity_shortfall']:.0%} of simulations show a "
                     f"meaningful shortfall.")
         parts.append(
-            f"EMS utilization averages {k['ems_utilization']:.0%} and final "
-            f"integration {k['integration_utilization']:.0%}; upside demand beyond "
-            f"this level cannot ship without additional capacity or overtime.")
+            f"EMS utilization, including final integration and test, averages "
+            f"{k['ems_utilization']:.0%}; upside demand beyond this level cannot "
+            f"ship without additional capacity or overtime.")
         return " ".join(parts)
 
     # ------------------------------------------------------------------

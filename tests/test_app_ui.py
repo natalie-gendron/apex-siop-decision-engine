@@ -26,7 +26,6 @@ INERT_IN_Q1 = [
     "Dual-source the high-end FPGA",
     "Commit long-lead component orders",
     "Qualify EMS Eastern Europe for Zenith Compute",
-    "Expand final-integration headcount",
 ]
 
 

@@ -50,4 +50,4 @@ def test_constraint_log_counts_each_unit_once(baseline):
     first_miss = np.clip(cum_dem - np.maximum(cum_ship, prev), 0, None)
     logged = baseline.constraints["units_lost"].sum()
     assert logged == pytest.approx(first_miss.sum(), abs=0.1 * len(baseline.constraints) + 1)
-    assert set(baseline.constraints["type"]) <= {"component", "ems_capacity", "integration"}
+    assert set(baseline.constraints["type"]) <= {"component", "ems_capacity"}

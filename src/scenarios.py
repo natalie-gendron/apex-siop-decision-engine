@@ -216,11 +216,6 @@ def describe_overrides(overrides: dict[str, Any]) -> str:
                      for c, x in v.items()]
         elif key == "expedite_premium_mult":
             bits.append(f"expedite premium ×{v:g}")
-        elif key == "integration_capacity_mult":
-            bits.append(f"integration capacity ×{v:g}")
-        elif key == "integration_capacity_ramp":
-            m, x = v
-            bits.append(f"integration capacity ×{x:g} from month {int(m) + 1}")
         elif key == "add_qualification":
             bits += [f"{s} qualified for {f} from month {int(m) + 1}"
                      for s, f, m in v]
@@ -340,7 +335,6 @@ def kpi_summary(result: SimulationResult, baseline: BaselineResult,
         "expedite_cost": percentile_stats(fiscal_year(result.expedite_cost)),
         "rework_cost": percentile_stats(fiscal_year(result.rework_cost)),
         "ems_utilization": float(result.ems_utilization[:, :12].mean()),
-        "integration_utilization": float(result.integration_utilization[:, :12].mean()),
         "capacity_shortfall_units": float(fiscal_year(result.capacity_shortfall_units).mean()),
         "component_short_units": float(fiscal_year(result.component_short_units).mean()),
     }

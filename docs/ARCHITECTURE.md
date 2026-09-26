@@ -128,7 +128,7 @@ sync.
 | **Demand plan** | The unconstrained demand statement: forecast + backlog, customer × family × month, at requested dates. | A supply commitment; confidence never rewrites it. |
 | **Plan (of record)** | The frozen revenue commitment for the cycle, derived from the demand plan by the baseline supply plan — the yardstick behind every "vs plan" delta and P(plan). Industry mapping: the revenue line of the AOP ("one set of numbers"), and the internal number behind quarterly street guidance. | A forecast; it never moves inside a cycle, and it never means a response package. Nor guidance itself — guidance is the external, usually more conservative derivative; anchor on the internal commitment or P(plan) quietly becomes P(guidance). |
 | **Outlook** | The simulated outcome distribution for a context — what the demand plan, pushed through supply and calibrated by evidence, is expected to produce. Always named by its context: the **standing base outlook** (base, ∅), a **scenario outlook** (unmitigated), the **conditioned outlook** (world + response). In graphics: the solid center line and band; the demand plan is never drawn in outcome space. | The plan — the outlook moves with the context, the plan never does; P(plan) is the measured gap between them. Nor "the decided version": decidedness is a sign-off event, not a context — whichever cell the meeting commits (package or none) becomes the **decision of record**. |
-| **Baseline supply plan** ("the baseline") | The feasible allocation of the demand plan across sites and months — respecting components, capacity and integration — whose revenue becomes the plan of record. "Deterministic" describes how it is computed (zero shocks), not what it is. | The base case: the base *outlook* is a simulation, the baseline is an allocation — frozen mechanics, reference only. |
+| **Baseline supply plan** ("the baseline") | The feasible allocation of the demand plan across sites and months — respecting components and EMS capacity — whose revenue becomes the plan of record. "Deterministic" describes how it is computed (zero shocks), not what it is. | The base case: the base *outlook* is a simulation, the baseline is an allocation — frozen mechanics, reference only. |
 | **Targets** | Annual financial goals (gross margin, inventory) — the margin and inventory lines of the AOP. | The plan. Not a synonym for "AOP": the AOP's revenue line is the plan of record, so naming only these AOP would split the term. |
 | **Scenario** (world) | Exogenous hypothesis about what happens *to* the business. | A decision; carries no cost. |
 | **Demand Confidence** (world) | Assessed evidence calibrating demand variance, push-out and cancellation odds around the demand plan. The sidebar shorthand "trust in the forecast" names the least certain slice; the mechanics act on the whole demand plan. | A hypothesis or a toggle. |
@@ -246,6 +246,11 @@ Executive answer first, then the meeting's supporting flow:
   were valued about 2.3x), and had no owner or data source. Each site runs at
   its own scheduled adherence. If an owner shows adherence erodes with load,
   it enters as an owned input, not a hidden derate.
+- **Final integration happens at the EMS** (2026-09). It is part of EMS
+  site capacity, not a separate stage; the in-house integration pool and its
+  two actions (temporary capacity, headcount) are retired, since their
+  decision is the EMS capacity decision. The integration input table is
+  generated but not read.
 - **EMS sites fill least-contested first, then cheapest** (2026-09), so
   flexible multi-family sites stay available for families with no
   alternative.

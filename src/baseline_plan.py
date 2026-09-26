@@ -10,7 +10,7 @@ Reporting conventions:
   - Past-due demand ages first-in, first-out within a product family.
   - The constraint log records each unit once, in the month it first misses
     its requested month, against the ceiling that cut it that month
-    (a named critical component, qualified EMS capacity, or integration).
+    (a named critical component or qualified EMS capacity).
 """
 from __future__ import annotations
 
@@ -24,8 +24,7 @@ from .shocks import Shocks
 from .simulation import run_simulation
 from .utils import N_MONTHS, quarter_of_month
 
-_LIMITS = [("component", None), ("ems_capacity", "Qualified EMS capacity"),
-           ("integration", "Final integration capacity")]
+_LIMITS = [("component", None), ("ems_capacity", "Qualified EMS capacity")]
 
 
 def _fifo_outstanding(cum_dem: np.ndarray, shipped_to_date: float, o: int) -> float:
@@ -100,7 +99,6 @@ def run_baseline(data: InputData, config: AppConfig) -> BaselineResult:
         "inventory_usd": r.inventory[0],
         "working_capital_usd": r.working_capital[0],
         "ems_utilization": site_load.sum(axis=0) / np.clip(site_cap.sum(axis=0), 1e-9, None),
-        "integration_utilization": r.integration_utilization[0],
     })
 
     plan_q = np.array([pa.revenue_plan_m[q * 3:(q + 1) * 3].sum() for q in range(6)])
@@ -120,10 +118,6 @@ def run_baseline(data: InputData, config: AppConfig) -> BaselineResult:
         family_revenue=pd.DataFrame(r.family_revenue[0], index=months, columns=fams),
         site_load=pd.DataFrame(site_load, index=sites, columns=months),
         site_capacity=pd.DataFrame(site_cap, index=sites, columns=months),
-        integration_load=pd.DataFrame({
-            "month": months, "load_units": built.sum(axis=1),
-            "capacity_units": r.integration_capacity[0],
-        }),
         component_usage=component_usage,
         constraints=pd.DataFrame(constraint_rows) if constraint_rows else pd.DataFrame(
             columns=["month", "type", "detail", "product_family", "units_lost"]),

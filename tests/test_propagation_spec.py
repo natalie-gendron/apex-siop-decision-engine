@@ -76,9 +76,14 @@ def _all(names, value):
 
 def test_demand_up_when_ems_binds_raises_past_due_and_lowers_service(sim, pa):
     """+20% demand with EMS capacity binding: shipments rise by less than
-    demand, past-due grows, service falls."""
-    base = sim("base")
-    up = sim("demand_up", demand_family_mult=_all(pa.families, 1.2))
+    demand, past-due grows, service falls. EMS is tightened 10% so the
+    premise holds: in the base world EMS binds in only one FY month, since
+    the separate integration stage (the old binding constraint) is folded
+    into EMS capacity."""
+    tight = _all(pa.site_names, 0.9)
+    base = sim("ems_tight", ems_capacity_mult=tight)
+    up = sim("ems_tight_demand_up", ems_capacity_mult=tight,
+             demand_family_mult=_all(pa.families, 1.2))
     d_dem = fy_mean(up.units_demanded) - fy_mean(base.units_demanded)
     d_ship = fy_mean(up.units_shipped) - fy_mean(base.units_shipped)
     assert d_dem > 0
@@ -113,8 +118,9 @@ def test_price_changes_revenue_not_units(sim):
 # ---------------------------------------------------------------------------
 
 def test_relieving_ems_capacity_exposes_next_constraint(sim, pa):
-    """Tripling EMS capacity helps, then plateaus: integration becomes the
-    constraint. Relieving integration too makes components bind."""
+    """Relieving EMS capacity (final integration and test included) helps,
+    then plateaus: critical components become the constraint. With more
+    demand on top, component shortage grows."""
     base = sim("base")
     ems15 = sim("ems_x1.5", ems_capacity_mult=_all(pa.site_names, 1.5))
     ems3 = sim("ems_x3", ems_capacity_mult=_all(pa.site_names, 3.0))
@@ -123,13 +129,14 @@ def test_relieving_ems_capacity_exposes_next_constraint(sim, pa):
     assert fy_mean(ems3.units_shipped) == pytest.approx(
         fy_mean(ems15.units_shipped), rel=0.005)
     assert ems3.ems_utilization[:, :12].mean() < 0.5
-    assert ems3.integration_utilization[:, :12].mean() > 0.8
-    assert service_level(ems3).mean() < 0.99
+    # the plateau is set by components, not capacity
+    assert ems3.capacity_shortfall_units.sum() == pytest.approx(0.0, abs=1e-6)
+    assert ems3.component_short_units[:, :12].sum(axis=1).mean() > 10
+    assert service_level(ems3).mean() < 0.999
 
     both = sim("demand_up_all_capacity_relieved",
                demand_family_mult=_all(pa.families, 1.2),
-               ems_capacity_mult=_all(pa.site_names, 3.0),
-               integration_capacity_mult=3.0)
+               ems_capacity_mult=_all(pa.site_names, 3.0))
     assert both.capacity_shortfall_units.sum() == pytest.approx(0.0, abs=1e-6)
     assert both.component_short_units[:, :12].sum(axis=1).mean() > 100
 
@@ -168,12 +175,11 @@ def test_lower_yield_reduces_shipments_when_capacity_binds(sim):
     "delay_frac also enlarges delayed_pool, so expediting recovers more and "
     "shortage FALLS. Lead time never gates when supply can respond"))
 def test_longer_lead_time_raises_shortage_under_demand_increase(sim, pa):
-    """Components binding (EMS and integration relieved), demand +20%:
+    """Components binding (EMS capacity relieved), demand +20%:
     a 50% longer lead time delays the supply response, so component
     shortage and lost shipments rise."""
     common = dict(demand_family_mult=_all(pa.families, 1.2),
-                  ems_capacity_mult=_all(pa.site_names, 3.0),
-                  integration_capacity_mult=3.0)
+                  ems_capacity_mult=_all(pa.site_names, 3.0))
     normal = sim("demand_up_all_capacity_relieved", **common)
     slow = sim("demand_up_relieved_lt_x1.5", lead_time_mult=1.5, **common)
     assert slow.component_short_units[:, :12].sum(axis=1).mean() > \
@@ -191,8 +197,7 @@ def test_component_purchases_respond_to_sustained_demand_beyond_lead_time(sim, p
     13-18 is no worse than in months 5-7."""
     r = sim("demand_up_all_capacity_relieved",
             demand_family_mult=_all(pa.families, 1.2),
-            ems_capacity_mult=_all(pa.site_names, 3.0),
-            integration_capacity_mult=3.0)
+            ems_capacity_mult=_all(pa.site_names, 3.0))
     early = r.component_short_units[:, 4:7].mean()
     late = r.component_short_units[:, 12:18].mean()
     assert late <= early
