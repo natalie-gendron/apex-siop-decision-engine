@@ -42,6 +42,8 @@ financial output it changes. If it can't, it doesn't go in.
 
 ## Reference docs
 
+- `docs/operating-model.md`: the SIOP operating model APEX serves (process,
+  cadence, decision rights, policies, agents).
 - `docs/ARCHITECTURE.md`: world x response model, vocabulary of record.
 - `docs/decision-catalog.md`, `docs/engine-reconciliation.md`,
   `docs/data-contract.md`, `docs/design-customer-dimension.md`: discovery
