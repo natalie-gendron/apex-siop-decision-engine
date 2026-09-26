@@ -51,6 +51,19 @@ class UncertaintySettings(BaseModel):
         return v
 
 
+class CustomerPolicy(BaseModel):
+    """Customer terms owned by Sales. A shorted order waits as backlog unless
+    its customer has a limit here: after that many months unserved it is lost."""
+    lost_after_months: dict[str, int] = Field(default_factory=dict)
+
+    @field_validator("lost_after_months")
+    @classmethod
+    def _months_nonneg(cls, v: dict[str, int]) -> dict[str, int]:
+        if any(n < 0 for n in v.values()):
+            raise ValueError("lost_after_months must be non-negative")
+        return v
+
+
 class FactorModel(BaseModel):
     names: list[str]
     persistence: float = Field(ge=0, lt=1)
@@ -76,6 +89,7 @@ class AppConfig(BaseModel):
     financial: FinancialAssumptions
     uncertainty: UncertaintySettings
     factors: FactorModel
+    customers: CustomerPolicy = Field(default_factory=CustomerPolicy)
 
 
 def load_config(path: Path | str | None = None) -> AppConfig:

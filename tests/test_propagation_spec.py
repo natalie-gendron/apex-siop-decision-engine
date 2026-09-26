@@ -270,10 +270,6 @@ def test_eo_reflects_component_obsolescence_risk(sim, data):
 # Structural: customer dimension, one engine
 # ---------------------------------------------------------------------------
 
-@pytest.mark.xfail(strict=True, reason=(
-    "src/simulation.py run_simulation aggregates demand to family x month "
-    "(build_planning_arrays groupby month/family); SimulationResult has no "
-    "customer dimension, so revenue concentration cannot be read"))
 def test_simulation_reports_revenue_by_customer(sim, data):
     r = sim("base")
     by_cust = getattr(r, "customer_revenue")

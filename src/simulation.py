@@ -42,6 +42,11 @@ def default_params() -> dict[str, Any]:
         "cancel_prob_mult": 1.0,
         "asp_mult": 1.0,
         "forced_pushout": None,          # {"family":, "from_month":, "to_month":, "units":}
+        "lost_after_months": {},         # customer -> months before a shorted order is lost
+                                         # (overrides config.customers per key; what-if only)
+        # allocation policy (SIOP-owned, response axis)
+        "allocation_policy": "strict_priority",  # see ALLOCATION_POLICIES
+        "protect_top_n": 3,              # customers protected under protect_top_n
         # components
         "lead_time_mult": 1.0,           # scales delay fractions
         "comp_disrupt_mult": 1.0,
@@ -68,6 +73,51 @@ def default_params() -> dict[str, Any]:
         "material_cost_mult": 1.0,
         "action_cost_usd": 0.0,          # one-time decision cost, spread over first quarter
     }
+
+
+# Engine constants (listed in the variable map; no owner yet)
+FIRM_CANCEL_SHARE = 0.5     # booked backlog cancels at half the forecast rate
+CUSTOMER_GROUP_SHARE = 0.5  # share of customer demand-shock variance from its group
+
+
+# allocation policy: a SIOP-owned decision (response axis). It moves revenue
+# between customers and months; it changes margin only through mix.
+ALLOCATION_POLICIES = {
+    "strict_priority": "Strict priority, backlog first",
+    "priority_first": "Strict priority, priority first",
+    "proportional": "Proportional (fair share)",
+    "protect_top_n": "Protect top customers",
+}
+
+
+def allocation_tiers(policy: str, pa: PlanningArrays, top_n: int = 3) -> list[np.ndarray]:
+    """Slice indices per tier, in serving order. Slices 0..L-1 are each line's
+    backlog (booked orders plus carried past-due), L..2L-1 its forecast.
+
+    strict_priority  every customer's backlog before anyone's forecast; customer
+                     priority (1 first) within each (default: honors commitments)
+    priority_first   priority 1 entirely (backlog, then forecast), then priority 2...
+    proportional     one tier: everyone gets the same fill ratio within a family
+    protect_top_n    the top-N customers by FY plan revenue (all slices), then
+                     everyone else's backlog, then everyone else's forecast
+    """
+    n_l = len(pa.line_fam)
+    firm_ix, fcst_ix = np.arange(n_l), np.arange(n_l, 2 * n_l)
+    prio = pa.cust_priority[pa.line_cust]
+    if policy == "proportional":
+        tiers = [np.arange(2 * n_l)]
+    elif policy == "strict_priority":
+        levels = np.unique(prio)
+        tiers = [firm_ix[prio == lv] for lv in levels] + [fcst_ix[prio == lv] for lv in levels]
+    elif policy == "priority_first":
+        tiers = [t for lv in np.unique(prio) for t in (firm_ix[prio == lv], fcst_ix[prio == lv])]
+    elif policy == "protect_top_n":
+        top = pa.line_cust < top_n          # customers are ordered by FY plan revenue
+        tiers = [np.r_[firm_ix[top], fcst_ix[top]], firm_ix[~top], fcst_ix[~top]]
+    else:
+        raise ValueError(f"unknown allocation policy {policy!r}; "
+                         f"choose from {sorted(ALLOCATION_POLICIES)}")
+    return [t for t in tiers if len(t)]
 
 
 def _lognormal_mult(shock: np.ndarray, sigma: float) -> np.ndarray:
@@ -110,57 +160,86 @@ def run_simulation(data: InputData, config: AppConfig,
     factors = engine.draw_factor_paths(rng, n_sims, M)   # (n, M, K)
 
     # ------------------------------------------------------------------
-    # 1. Demand: correlated market multipliers + timing events
+    # 1. Demand by line (customer x family). Backlog is booked: timing risk
+    #    only. Forecast takes market and customer volume shocks too.
     # ------------------------------------------------------------------
+    lfam, lcust = pa.line_fam, pa.line_cust
+    n_l, n_cu = len(lfam), len(pa.customers)
+    fam_onehot = np.eye(n_f)[lfam]                                     # (L, F)
+    cust_onehot = np.eye(n_cu)[lcust]                                  # (L, Cu)
+
     market_shock = {mkt: engine.shock(mkt, factors, rng) for mkt in unc.market_demand_sigma}
     sigma_mult = float(p["demand_sigma_mult"]) * sh.demand
-    demand = np.empty((n_sims, M, n_f))
+    fam_mult = np.empty((n_sims, M, n_f))
+    scen = np.empty((M, n_f))
     for f, fam in enumerate(fams):
         mkt = FAMILY_MARKET[fam]
-        mult = _lognormal_mult(market_shock[mkt],
-                               unc.market_demand_sigma[mkt] * sigma_mult)
-        idio = _lognormal_mult(rng.standard_normal((n_sims, 1)),
-                               unc.customer_idiosyncratic_sigma * sigma_mult)
-        scen = p["demand_market_mult"].get(mkt, 1.0) * p["demand_family_mult"].get(fam, 1.0)
-        scen_path = np.asarray(scen, dtype=float)
-        if scen_path.ndim == 0:
-            scen_path = np.full(M, float(scen_path))
-        demand[:, :, f] = pa.demand_units[None, :, f] * mult * idio * scen_path[None, :]
+        fam_mult[:, :, f] = _lognormal_mult(market_shock[mkt],
+                                            unc.market_demand_sigma[mkt] * sigma_mult)
+        scen[:, f] = np.broadcast_to(np.asarray(
+            p["demand_market_mult"].get(mkt, 1.0), dtype=float), (M,)) \
+            * np.broadcast_to(np.asarray(p["demand_family_mult"].get(fam, 1.0), dtype=float), (M,))
+    # persistent customer shock; customers in one group share part of it
+    group_z = rng.standard_normal((n_sims, int(pa.cust_group.max()) + 1))
+    own_z = rng.standard_normal((n_sims, n_cu))
+    cust_z = (np.sqrt(CUSTOMER_GROUP_SHARE) * group_z[:, pa.cust_group]
+              + np.sqrt(1 - CUSTOMER_GROUP_SHARE) * own_z)
+    cust_mult = _lognormal_mult(cust_z, unc.customer_idiosyncratic_sigma * sigma_mult)
 
-    # cancellations (remove), push-outs (shift +1/+2), pull-ins (shift -1)
     # calibrated event rates scale with the timing shock; lever deltas
     # (pushout_prob_add etc.) apply on top, so they survive a zero-shock run
     ev = sh.timing_events
-    cancel_p = np.clip(pa.cancel_prob[None, None, :] * ev * p["cancel_prob_mult"], 0, 1)
-    push_p = np.clip(pa.pushout_prob[None, None, :] * ev + p["pushout_prob_add"], 0, 1)
-    pull_p = np.clip(pa.pullin_prob[None, None, :] * ev + p["pullin_prob_add"], 0, 1)
-    # sim-level heterogeneity in timing behavior (beta-like via lognormal clipping)
+    cancel_p = np.clip(pa.line_cancel[None] * ev * p["cancel_prob_mult"], 0, 1)
+    push_p = np.clip(pa.line_push[None] * ev + p["pushout_prob_add"], 0, 1)
+    pull_p = np.clip(pa.line_pull[None] * ev + p["pullin_prob_add"], 0, 1)
+    # path-level heterogeneity in timing behavior (beta-like via lognormal clipping)
     timing_noise = _lognormal_mult(rng.standard_normal((n_sims, 1, 1)), 0.35 * ev)
     push_p = np.clip(push_p * timing_noise, 0, 0.6)
     pull_p = np.clip(pull_p * timing_noise ** 0.5, 0, 0.3)
 
-    demand = demand * (1 - cancel_p)
-    pushed = demand * push_p
-    pulled = demand * pull_p
-    demand = demand - pushed - pulled
-    demand[:, 1:, :] += 0.7 * pushed[:, :-1, :]
-    demand[:, 2:, :] += 0.3 * pushed[:, :-2, :]
-    # pushes from the final months partially leave the 18-month horizon; in
-    # steady state a similar inflow arrives from orders pushed before the
-    # horizon start, so months 0-1 receive the mirrored inflow
-    demand[:, 0, :] += 0.7 * pushed[:, 0, :]
-    demand[:, 1, :] += 0.3 * pushed[:, 0, :]
-    demand[:, :-1, :] += pulled[:, 1:, :]
-    demand[:, 0, :] += pulled[:, 0, :]  # cannot pull before horizon; stays in month
+    scen_l = scen[None][:, :, lfam]                                    # (1, M, L)
+    firm = pa.line_backlog[None] * scen_l * (1 - FIRM_CANCEL_SHARE * cancel_p)
+    fcst = (pa.line_forecast[None] * scen_l * (1 - cancel_p)
+            * fam_mult[:, :, lfam] * cust_mult[:, None, lcust])
+
+    # push-outs move the whole line-month order: one uniform per line-month
+    # decides it (u < p pushes; u < 0.3p slips two months); pushed orders
+    # return as backlog
+    u = rng.random((n_sims, M, n_l))
+    pushed = u < push_p
+    two = u < 0.3 * push_p
+    tot = firm + fcst
+    firm = np.where(pushed, 0.0, firm)
+    fcst = np.where(pushed, 0.0, fcst)
+    firm[:, 1:] += (tot * (pushed & ~two))[:, :-1]
+    firm[:, 2:] += (tot * two)[:, :-2]
+    # pushes from the final months leave the horizon; in steady state a
+    # similar inflow arrives from orders pushed before it, so months 0-1
+    # receive the expected month-0 pushes
+    inflow = tot[:, 0] * push_p[:, 0]
+    firm[:, 0] += 0.7 * inflow
+    firm[:, 1] += 0.3 * inflow
+    # pull-ins: an expected share of next month's orders books a month early
+    pulled = (firm + fcst) * pull_p
+    firm, fcst = firm * (1 - pull_p), fcst * (1 - pull_p)
+    firm[:, :-1] += pulled[:, 1:]
+    firm[:, 0] += pulled[:, 0]  # cannot pull before horizon; stays in month
 
     if p["forced_pushout"]:
         fp = p["forced_pushout"]
-        f = fams.index(fp["family"])
-        units = np.minimum(demand[:, fp["from_month"], f], fp["units"])
-        demand[:, fp["from_month"], f] -= units
-        demand[:, fp["to_month"], f] += units
+        in_fam = lfam == fams.index(fp["family"])
+        a, b = fp["from_month"], fp["to_month"]
+        tot_a = (firm[:, a] + fcst[:, a]) * in_fam
+        fam_tot = tot_a.sum(axis=1, keepdims=True)
+        share = np.divide(np.minimum(fam_tot, fp["units"]), fam_tot,
+                          out=np.zeros_like(fam_tot), where=fam_tot > 1e-12)
+        firm[:, b] += tot_a * share
+        firm[:, a] -= firm[:, a] * in_fam * share
+        fcst[:, a] -= fcst[:, a] * in_fam * share
 
-    demand = np.clip(demand, 0, None)
+    firm = np.clip(firm, 0, None)
+    fcst = np.clip(fcst, 0, None)
+    demand = (firm + fcst) @ fam_onehot                                # (n, M, F)
 
     # ------------------------------------------------------------------
     # 2. Component supply pipelines (all critical components, vectorized)
@@ -295,8 +374,31 @@ def run_simulation(data: InputData, config: AppConfig,
     site_order = [np.lexsort((pa.site_cost, qual_by_month[m].sum(axis=1)))
                   for m in range(M)]
 
-    ship = np.zeros((n_sims, M, n_f))
-    backlog = np.zeros((n_sims, n_f))
+    # allocation: slices are (line, backlog) and (line, forecast). The policy
+    # orders them into tiers; each tier is rationed pro-rata within a family
+    # against what earlier tiers left
+    tiers = allocation_tiers(p["allocation_policy"], pa, int(p["protect_top_n"]))
+    slice_fam = np.r_[lfam, lfam]
+    slice_onehot = np.r_[fam_onehot, fam_onehot]                        # (K, F)
+    tier_onehot = [slice_onehot[t] for t in tiers]
+
+    # shorted orders wait as backlog unless their customer loses them after N
+    # months; ages are tracked in cohorts only when some customer has a limit
+    lost_after = {**config.customers.lost_after_months, **p["lost_after_months"]}
+    unknown = set(lost_after) - set(pa.customers)
+    if unknown:
+        raise KeyError(f"lost_after_months names unknown customers: {sorted(unknown)}")
+    never = M + 1
+    line_limit = np.array([lost_after.get(pa.customers[c], never) for c in lcust])
+    finite = line_limit[line_limit < never]
+    n_age = int(min(finite.max(), M)) + 2 if finite.size else 1
+    ages = np.arange(1, n_age + 1)[:, None]                             # cohort a holds age a+1
+    lose = ages > line_limit[None, :]                                   # (A, L)
+
+    ship_l = np.zeros((n_sims, M, n_l))
+    carry = np.zeros((n_age, n_sims, n_l))          # unmet by age cohort
+    lost_l = np.zeros((n_sims, M, n_l))
+    late_um_l = np.zeros((n_sims, n_l))             # FY late unit-months
     backlog_path = np.zeros((n_sims, M, n_f))      # end-of-month unmet (past-due)
     cum_consumed = np.zeros((n_sims, n_c))
     comp_short = np.zeros((n_sims, M))
@@ -309,100 +411,132 @@ def run_simulation(data: InputData, config: AppConfig,
     fam_uses = [usage[:, f] > 0 for f in range(n_f)]
 
     for m in range(M):
-        want = demand[:, m, :] + backlog                               # (n, F)
+        firm_new = firm[:, m]
+        want_k = np.concatenate([firm_new + carry.sum(axis=0), fcst[:, m]], axis=1)
+        alloc_k = np.zeros_like(want_k)
+        comp_res = np.clip(comp_avail[:, m, :] - cum_consumed, 0, None)  # (n, C)
+        site_rem = site_cap[:, :, m].copy()                             # (n, S)
+        binding_m = np.zeros((n_sims, n_c), bool)
 
-        # component rationing: proportional scale per component, min across components
-        avail = np.clip(comp_avail[:, m, :] - cum_consumed, 0, None)   # (n, C)
-        req = want @ usage.T                                           # (n, C)
-        with np.errstate(divide="ignore", invalid="ignore"):
-            scale_c = np.where(req > 1e-9, np.minimum(1.0, avail / req), 1.0)
-        # a family's scale is the worst of its components
-        fam_scale = np.ones((n_sims, n_f))
-        for f in range(n_f):
-            used = fam_uses[f]
-            if used.any():
-                sc = np.where(used[None, :], scale_c, np.inf)
-                fam_scale[:, f] = sc.min(axis=1)
-                binding_comp[:, m, f] = np.where(fam_scale[:, f] < 0.999,
-                                                 sc.argmin(axis=1), -1)
-        binding = scale_c < 0.999
-        comp_binding_count += binding & (req > 1e-9)
-        after_comp = want * fam_scale
+        for idx, oh in zip(tiers, tier_onehot):
+            w = want_k[:, idx]
+            if not w.any():
+                continue
+            fam_w = w @ oh                                              # (n, F)
+            # components: proportional scale per component, family takes its worst
+            req = fam_w @ usage.T                                       # (n, C)
+            with np.errstate(divide="ignore", invalid="ignore"):
+                scale_c = np.where(req > 1e-9, np.minimum(1.0, comp_res / req), 1.0)
+            fam_scale = np.ones((n_sims, n_f))
+            for f in range(n_f):
+                used = fam_uses[f]
+                if used.any():
+                    sc = np.where(used[None, :], scale_c, np.inf)
+                    fam_scale[:, f] = sc.min(axis=1)
+                    cut = (fam_scale[:, f] < 0.999) & (fam_w[:, f] > 1e-9)
+                    binding_comp[:, m, f] = np.where(cut, sc.argmin(axis=1),
+                                                     binding_comp[:, m, f])
+            binding_m |= (scale_c < 0.999) & (req > 1e-9)
+            after_comp = fam_w * fam_scale
 
-        # EMS capacity by family: iterative water-filling. Each round, every
-        # site (least-contested first) allocates its remaining capacity across
-        # qualified families in proportion to their remaining std-equivalent
-        # demand; three rounds recover nearly all slack a single pass strands.
-        after_cap = np.zeros((n_sims, n_f))
-        site_rem = site_cap[:, :, m].copy()                            # (n, S)
-        for _ in range(3):
-            unmet_u = np.clip(after_comp - after_cap, 0, None)
-            unmet_std = unmet_u * pa.family_complexity[None, :]
-            if unmet_std.sum() < 1e-6:
-                break
-            for s in site_order[m]:
-                qual = qual_by_month[m, s]                             # (F,)
-                q_std = unmet_std * qual[None, :]
-                denom = q_std.sum(axis=1, keepdims=True)
-                share = np.divide(q_std, denom, out=np.zeros_like(q_std),
-                                  where=denom > 1e-9)
-                give_std = np.minimum(q_std, site_rem[:, s][:, None] * share)
-                after_cap += give_std / pa.family_complexity[None, :]
-                site_rem[:, s] -= give_std.sum(axis=1)
-                unmet_std = np.clip(unmet_std - give_std, 0, None)
-        shipped = np.minimum(after_cap, after_comp)
+            # EMS capacity: iterative water-filling. Each round, every site
+            # (least-contested first) splits its remaining capacity across
+            # qualified families in proportion to remaining std-equivalent
+            # demand; three rounds recover nearly all slack one pass strands.
+            after_cap = np.zeros((n_sims, n_f))
+            for _ in range(3):
+                unmet_std = np.clip(after_comp - after_cap, 0, None) * pa.family_complexity[None, :]
+                if unmet_std.sum() < 1e-6:
+                    break
+                for s in site_order[m]:
+                    q_std = unmet_std * qual_by_month[m, s][None, :]
+                    denom = q_std.sum(axis=1, keepdims=True)
+                    share = np.divide(q_std, denom, out=np.zeros_like(q_std),
+                                      where=denom > 1e-9)
+                    give_std = np.minimum(q_std, site_rem[:, s][:, None] * share)
+                    after_cap += give_std / pa.family_complexity[None, :]
+                    site_rem[:, s] -= give_std.sum(axis=1)
+                    unmet_std = np.clip(unmet_std - give_std, 0, None)
+            shipped_f = np.minimum(after_cap, after_comp)
 
-        ship[:, m, :] = shipped
-        backlog = want - shipped
-        backlog_path[:, m, :] = backlog
+            comp_res -= shipped_f @ usage.T
+            ratio = np.divide(shipped_f, fam_w, out=np.zeros_like(fam_w), where=fam_w > 1e-12)
+            alloc_k[:, idx] = w * ratio[:, slice_fam[idx]]
+            limit_units[0, :, m] += fam_w - after_comp
+            limit_units[1, :, m] += after_comp - shipped_f
+
+        comp_binding_count += binding_m
+        ship_firm, ship_fcst = alloc_k[:, :n_l], alloc_k[:, n_l:]
+        ship_l[:, m] = ship_firm + ship_fcst
+        shipped = ship_l[:, m] @ fam_onehot
         cum_consumed += shipped @ usage.T
         site_load[:, :, m] = site_cap[:, :, m] - site_rem
-        limit_units[0, :, m] = want - after_comp
-        limit_units[1, :, m] = after_comp - shipped
-        comp_short[:, m] = (want - after_comp).sum(axis=1)
-        cap_short[:, m] = (after_comp - shipped).sum(axis=1)
 
+        # backlog: shipments serve the oldest orders first; this month's
+        # unserved orders become age-1 backlog; over-age backlog is lost
+        rem = ship_firm.copy()
+        for a in range(n_age - 1, -1, -1):
+            take = np.minimum(carry[a], rem)
+            carry[a] -= take
+            rem -= take
+        unmet_new = np.clip((firm_new - rem) + (fcst[:, m] - ship_fcst), 0, None)
+        if n_age > 1:
+            oldest = carry[-1] + carry[-2]      # the last cohort holds every older age
+            carry[1:-1] = carry[:-2].copy()
+            carry[-1] = oldest
+            carry[0] = unmet_new
+        else:
+            carry[0] += unmet_new
+        lost_now = (carry * lose[:, None, :]).sum(axis=0)
+        carry *= ~lose[:, None, :]
+        lost_l[:, m] = lost_now
+
+        backlog_line = carry.sum(axis=0)
+        backlog_path[:, m] = backlog_line @ fam_onehot
+        if m < 12:
+            late_um_l += backlog_line
+        comp_short[:, m] = limit_units[0, :, m].sum(axis=1)
+        cap_short[:, m] = limit_units[1, :, m].sum(axis=1)
+
+    ship = ship_l @ fam_onehot                                         # (n, M, F)
     ems_load_std = (ship * pa.family_complexity[None, None, :]).sum(axis=2)
     total_cap = site_cap.sum(axis=1)
     ems_util = ems_load_std / np.clip(total_cap, 1e-9, None)
 
     # ------------------------------------------------------------------
-    # 5. Revenue recognition (with acceptance / site-readiness slip)
+    # 5. Revenue recognition by line (acceptance / site-readiness slip)
     # ------------------------------------------------------------------
     # calibrated slip odds scale with the shock; a lever's added slip stays
     accept_delay_p = np.clip(
-        (pa.family_accept_prob_delay[None, :] + (1 - pa.site_readiness[None, :]))
-        * sh.acceptance_slip + p["acceptance_delay_add"], 0, 0.9)
-    slip_frac = accept_delay_p[None, :, :] * np.ones((n_sims, 1, 1))
+        (pa.family_accept_prob_delay[lfam] + (1 - pa.line_readiness))
+        * sh.acceptance_slip + p["acceptance_delay_add"], 0, 0.9)      # (L,)
     slip_noise = np.clip(rng.beta(4, 6, size=(n_sims, 1, 1)) * 2.0, 0.3, 1.7)
     slip_noise = 1.0 + sh.acceptance_slip * (slip_noise - 1.0)
-    slip_frac = np.clip(slip_frac * slip_noise, 0, 0.9)
+    sf = np.clip(accept_delay_p[None, None, :] * slip_noise, 0, 0.9)   # (n, 1, L)
 
-    rec = np.zeros_like(ship)
-    for f in range(n_f):
-        lag = int(pa.family_rec_lag[f])
-        base_rec = np.zeros((n_sims, M))
-        if lag == 0:
-            base_rec[:] = ship[:, :, f]
-        else:
-            base_rec[:, lag:] = ship[:, :-lag, f]
-            base_rec[:, :lag] = ship[:, :lag, f].mean(axis=1, keepdims=True)
-        sf = slip_frac[:, 0, f][:, None]
-        rec_f = base_rec * (1 - sf)
-        rec_f[:, 1:] += (base_rec * sf)[:, :-1]
-        # steady-state inflow from systems that slipped acceptance before the horizon
-        rec_f[:, 0] += base_rec[:, 0] * sf[:, 0]
-        rec[:, :, f] = rec_f
+    # one-month recognition lag for acceptance-based families; the first
+    # month recognizes systems finished before the horizon at the month-1 rate
+    lagged = np.empty_like(ship_l)
+    lagged[:, 1:] = ship_l[:, :-1]
+    lagged[:, :1] = ship_l[:, :1]
+    base_rec = np.where((pa.family_rec_lag[lfam] >= 1)[None, None, :], lagged, ship_l)
+    rec_l = base_rec * (1 - sf)
+    rec_l[:, 1:] += (base_rec * sf)[:, :-1]
+    # steady-state inflow from systems that slipped acceptance before the horizon
+    rec_l[:, 0] += base_rec[:, 0] * sf[:, 0]
+    rec = rec_l @ fam_onehot                                           # (n, M, F)
 
     # ------------------------------------------------------------------
     # 6. Financial translation
     # ------------------------------------------------------------------
     if progress_cb:
         progress_cb(0.8, "Translating to financial outcomes")
-    asp_shock = rng.standard_normal((n_sims, 1, n_f))
+    # revenue per line at the customer's ASP, with a price shock per customer
+    asp_shock = rng.standard_normal((n_sims, 1, n_cu))
     pc = sh.price_cost
-    asp_mult = _lognormal_mult(asp_shock, unc.asp_sigma * pc) * p["asp_mult"]
-    revenue_fm = rec * pa.family_asp[None, None, :] * asp_mult
+    asp_mult = _lognormal_mult(asp_shock, unc.asp_sigma * pc)[:, :, lcust] * p["asp_mult"]
+    revenue_l = rec_l * pa.line_asp[None, None, :] * asp_mult          # (n, M, L)
+    revenue_fm = revenue_l @ fam_onehot
     revenue = revenue_fm.sum(axis=2)
 
     ppv_mult = _lognormal_mult(rng.standard_normal((n_sims, 1)), unc.material_cost_sigma * pc)
@@ -425,6 +559,12 @@ def run_simulation(data: InputData, config: AppConfig,
         + (rec * integ_c[None, None, :]).sum(axis=2) \
         + (rec * freight_c[None, None, :]).sum(axis=2) * freight_mult \
         + (rec * (warr_c + scrap_c)[None, None, :]).sum(axis=2)
+
+    # standard cost per recognized unit by line: customer contribution at standard
+    unit_cost_l = (mat_c[lfam][None, None, :] * material_mult[:, :, None]
+                   + conv_c[lfam][None, None, :] * conv_mult[:, :, None]
+                   + (integ_c + warr_c + scrap_c)[lfam][None, None, :]
+                   + freight_c[lfam][None, None, :] * freight_mult[:, :, None])
 
     # rework: units failing first pass are reworked at half conversion cost
     rework_cost = (ship * (0.5 * conv_c)[None, None, :]).sum(axis=2) * (1 - fpy_eff)
@@ -501,7 +641,7 @@ def run_simulation(data: InputData, config: AppConfig,
         "Freight cost multiplier": freight_mult[:, :3].mean(axis=1),
         "First-pass yield": fpy_eff[:, :3].mean(axis=1),
         "Component delay fraction": delay_frac[:, :3, :].mean(axis=(1, 2)),
-        "Acceptance slip fraction": slip_frac[:, 0, :].mean(axis=1),
+        "Acceptance slip fraction": sf[:, 0, :].mean(axis=1),
     }
 
     comp_binding = {name: comp_binding_count[:, i] > 0
@@ -521,6 +661,14 @@ def run_simulation(data: InputData, config: AppConfig,
         capacity_shortfall_units=cap_short, component_short_units=comp_short,
         component_binding=comp_binding, site_disrupted=site_disrupted,
         drivers=drivers, params=p,
+        customers=list(pa.customers),
+        customer_revenue=revenue_l @ cust_onehot,
+        customer_gross_profit=((revenue_l - rec_l * unit_cost_l) @ cust_onehot).astype(np.float32),
+        customer_shipped=(ship_l @ cust_onehot).astype(np.float32),
+        customer_demand=((firm + fcst) @ cust_onehot).astype(np.float32),
+        customer_lost_revenue=((lost_l * pa.line_asp[None, None, :]) @ cust_onehot
+                               ).astype(np.float32),
+        customer_late_unit_months=(late_um_l @ cust_onehot).astype(np.float32),
         family_backlog=backlog_path, site_load=site_load, site_capacity=site_cap,
         limit_units=limit_units,
         binding_component=binding_comp,

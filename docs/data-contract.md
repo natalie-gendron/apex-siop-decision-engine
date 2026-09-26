@@ -15,11 +15,11 @@ Horizon: 18 monthly buckets. Refresh cadence assumes a monthly SIOP cycle with a
 | Field | Grain | Refresh | Likely owner | Replaces (synthetic) | Status |
 |---|---|---|---|---|---|
 | Consensus demand, forecast (unbooked) units | customer x family x month | Monthly | Demand Planning | `demand_plan.base_forecast_units` | Used |
-| Firm backlog units | customer x family x month (ideally order line) | Weekly | Sales Ops / CRM | `demand_plan.backlog_units` | Used as total only; the firm split is unused until the customer dimension (build step 3). Before step 1 the old baseline served backlog first |
+| Firm backlog units | customer x family x month (ideally order line) | Weekly | Sales Ops / CRM | `demand_plan.backlog_units` | Used: backlog takes timing risk only and is served first under the policy of record |
 | Customer requested date | order line or customer x family x month | Weekly | Sales Ops / CRM | `demand_plan.requested_month` | Generated but unused since step 1 (the old baseline used it as a sort tie-break) |
 | Committed (promised) date | order line | Weekly | Planning / Order Mgmt | `demand_plan.committed_month` | Generated but unused (always equals `month`) |
 | Bookings units | customer x family x month | Monthly | Sales Ops | `demand_plan.bookings_units` | Generated but unused (copy of backlog) |
-| Customer priority / allocation tier | customer | Quarterly | SIOP leadership | `demand_plan.customer_priority` | Unused since step 1 (old baseline sort); returns as the strict-priority policy in build step 3 |
+| Customer priority / allocation tier | customer | Quarterly | SIOP leadership | `demand_plan.customer_priority` | Used: serving order under the strict-priority policies |
 | Customer group, region | customer | On change | Sales Ops | `demand_plan.customer_group`, `.region` | Used (score only / exports) |
 | Customer ASP | customer x family (x month if price changes) | Quarterly | Pricing / ERP | `demand_plan.asp_usd` | Used, but collapsed to a demand-weighted family average before revenue is computed |
 | Customer site readiness (install sites ready) | customer x family | Monthly | Service / CRM | `demand_plan.site_readiness_prob` | Used (sim acceptance slip) |
@@ -49,7 +49,7 @@ Horizon: 18 monthly buckets. Refresh cadence assumes a monthly SIOP cycle with a
 | Build cycle time | family (x site) | Quarterly | Planning | `products.build_cycle_months` | Used (WIP value); `ems_capacity.cycle_time_weeks` Generated but unused |
 | Final integration and test capacity at EMS | EMS site x month | Monthly | EMS Program Mgmt | `integration_capacity.integration_capacity_units` | Generated but unused since 2026-09: integration is folded into EMS site capacity. If a site's test cells bind separately from build capacity, add a per-site test-cell cap from EMS Program Mgmt |
 | Installation capacity | region x month | Monthly | Field Service | `integration_capacity.installation_capacity_units` | Generated but unused (removed from the engine, 2026-09: never enforced, and not a target constraint) |
-| Allocation / priority rules | rule set | On change | SIOP leadership | none (one engine, proportional within family; selectable policy planned in build step 3) | Missing |
+| Allocation / priority rules | rule set | On change | SIOP leadership | `config.customers.lost_after_months` (per customer); allocation policy is a sidebar choice with a policy of record | Partly: the rule set exists as four named policies; real tiers and lost-sale terms Missing |
 | Constrained supply plan (if solved) | family x site x month, pegged to customer | Weekly | Planning | none (APEX solves its own rough cut) | Missing, unconfirmed whether it exists |
 
 ### 1.3 ERP (Finance systems, Cost Accounting)

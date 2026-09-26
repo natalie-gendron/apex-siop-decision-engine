@@ -39,6 +39,7 @@ class BaselineResult:
     supply_units: np.ndarray         # (n_months, n_families) constrained builds
     revenue_plan_q: np.ndarray       # quarterly revenue plan (6,)
     revenue_plan_m: np.ndarray       # monthly revenue plan (18,)
+    customer_revenue: pd.DataFrame | None = None  # month x customer, baseline allocation
 
 
 @dataclass
@@ -83,6 +84,14 @@ class SimulationResult:
     binding_component: np.ndarray | None = None  # (n, M, F) index of ceiling component, -1 none
     component_consumed: np.ndarray | None = None  # (n, M, C) units consumed per month
     component_usable_supply: np.ndarray | None = None  # (n, M, C) cumulative usable supply
+    # customer detail; customers ordered by FY plan revenue, largest first
+    customers: list[str] = field(default_factory=list)
+    customer_revenue: np.ndarray | None = None       # (n, M, Cu) recognized revenue
+    customer_gross_profit: np.ndarray | None = None  # (n, M, Cu) revenue less standard cost
+    customer_shipped: np.ndarray | None = None       # (n, M, Cu) units shipped
+    customer_demand: np.ndarray | None = None        # (n, M, Cu) units requested (after timing)
+    customer_lost_revenue: np.ndarray | None = None  # (n, M, Cu) orders lost after waiting, at ASP
+    customer_late_unit_months: np.ndarray | None = None  # (n, Cu) FY sum of past-due units
 
     @property
     def gross_margin(self) -> np.ndarray:

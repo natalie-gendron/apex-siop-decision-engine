@@ -24,12 +24,12 @@ financial answer.
 | Permanent capacity (take-or-pay, headcount) | Recurring cost every month after the action takes effect | xfail | `action_cost_m[:3]`: one-time Q1 cost only | Yes: understates the run-rate cost of the action, and the EV favors it | Make it propagate: add a `recurring_cost_usd_per_month` from the start month |
 | Buy more components | AP rises with purchases; cash timing follows receipts | xfail | `ap = 0.75 * cogs * dpo / 30`, based on COGS, not receipts | Yes: cash impact of a buy-ahead is overstated by the full AP offset | Make it propagate: AP on receipt value |
 | Obsolescence risk | E&O reflects component `obsolescence_risk` | xfail | `eo_reserve` uses one flat `eo_reserve_rate`; column never read | Yes, where excess sits in high-risk parts (for example buy-ahead of a single part) | Make it propagate: weight the reserve by risk. If excess is always diversified, remove the column instead |
-| Customer-level outputs | Revenue by customer (concentration) | xfail | Demand aggregated to family x month; `SimulationResult` has no customer axis | Yes: who gets shorted drives concentration risk (design commitment) | Make it propagate per `docs/design-customer-dimension.md` |
+| Customer-level outputs | Revenue by customer (concentration) | pass (step 3) | Fixed: demand lines customer x family; `customer_revenue` and customer metrics | Yes: who gets shorted drives concentration risk (design commitment) | Make it propagate per `docs/design-customer-dimension.md` |
 | Zero-shock reconciliation | Sim with no shocks matches baseline FY revenue within 1% | pass (step 1) | Fixed: the baseline is the engine with `Shocks.zero()`; exact equality in `tests/test_engine_reconciliation.py` | Yes: the base case and the plan disagree ("two engines" defect) | Done |
 
 ## Summary
 
-After build step 1, seven pass and eight are xfail. At discovery, five passed and ten were xfail. Nine of the ten original xfails failed the governing rule, because
+After build step 3, eight pass and seven are xfail. At discovery, five passed and ten were xfail. Nine of the ten original xfails failed the governing rule, because
 leaving the mechanism out changes a financial answer. The obsolescence row is the
 only one where removing the input is a legitimate choice. No lever is purely cosmetic
 enough to be relabeled "cost-only" and left alone. FPY comes closest, and at current

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import fields
 
-from src.config import FinancialAssumptions, UncertaintySettings
+from src.config import CustomerPolicy, FinancialAssumptions, UncertaintySettings
 from src.shocks import Shocks
 from src.simulation import default_params
 from src.variable_map import LAYERS, mapped_names, variable_map
@@ -20,7 +20,7 @@ ENGINE_DATA_COLUMNS = {
     "unit_cost_usd", "available_capacity_units", "max_overtime_units",
     "schedule_adherence", "labor_availability", "first_pass_yield",
     "cost_per_std_unit_usd", "overtime_premium_pct", "regional_disruption_prob_monthly",
-    "revenue_plan_usd",
+    "revenue_plan_usd", "customer", "customer_priority", "customer_group",
 }
 
 
@@ -33,7 +33,8 @@ def test_every_shock_switch_is_mapped():
 
 
 def test_every_config_setting_is_mapped():
-    names = set(UncertaintySettings.model_fields) | set(FinancialAssumptions.model_fields)
+    names = (set(UncertaintySettings.model_fields) | set(FinancialAssumptions.model_fields)
+             | set(CustomerPolicy.model_fields))
     assert names - mapped_names() == set()
 
 

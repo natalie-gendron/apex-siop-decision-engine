@@ -35,7 +35,8 @@ def _fifo_outstanding(cum_dem: np.ndarray, shipped_to_date: float, o: int) -> fl
 
 
 def run_baseline(data: InputData, config: AppConfig) -> BaselineResult:
-    """The deterministic 18-month baseline supply plan (zero-shock engine)."""
+    """The deterministic 18-month baseline supply plan (zero-shock engine,
+    default allocation policy: strict customer priority)."""
     r = run_simulation(data, config, n_sims=1, seed=0, shocks=Shocks.zero(),
                        scenario_name="Baseline supply plan", keep_component_paths=True)
     pa = build_planning_arrays(data)
@@ -128,4 +129,6 @@ def run_baseline(data: InputData, config: AppConfig) -> BaselineResult:
         supply_units=built,
         revenue_plan_q=plan_q,
         revenue_plan_m=pa.revenue_plan_m,
+        customer_revenue=pd.DataFrame(r.customer_revenue[0], index=months,
+                                      columns=r.customers),
     )

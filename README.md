@@ -177,8 +177,9 @@ runs of the full dashboard).
 ## Known limitations (Version 1)
 
 - Monthly buckets; no weekly granularity.
-- Family-level allocation, proportional within a family; the customer
-  dimension is designed (`docs/design-customer-dimension.md`), not yet built.
+- Allocation by customer x family line under a selectable SIOP policy
+  (strict priority backlog first by default); within a tier, pro-rata by
+  family.
 - Allocation heuristic, not optimization.
 - Simplified revenue recognition (0/1-month lag + stochastic slip), no
   balance-sheet FX, approximate overtime/reservation cost mechanics.

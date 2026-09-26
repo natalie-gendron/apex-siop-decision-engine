@@ -246,6 +246,20 @@ Executive answer first, then the meeting's supporting flow:
   were valued about 2.3x), and had no owner or data source. Each site runs at
   its own scheduled adherence. If an owner shows adherence erodes with load,
   it enters as an owned input, not a hidden derate.
+- **Customer dimension in the one engine** (2026-09, build step 3). Demand
+  runs as customer x family lines split into backlog (timing risk only) and
+  forecast. Revenue is recognized per customer at the customer's ASP.
+- **Allocation policy is a SIOP policy on the response axis** (2026-09). Four
+  named rules: strict priority backlog first (the policy of record, used by
+  the plan of record), strict priority priority first, proportional, protect
+  top N. It is a standing policy, not a costed action: it moves revenue
+  between customers and months and changes margin only through mix. Every
+  rule is priced side by side on Management Recommendations (common random
+  numbers). A non-default choice in the sidebar becomes part of the response
+  context.
+- **Shorted orders wait by default** (2026-09). A per-customer
+  `lost_after_months` in config (owner: Sales) turns waiting backlog into
+  lost revenue after N months.
 - **One variable map** (2026-09). `src/variable_map.py` lists every input
   that can change a result, by layer (volatility, event rate, shock switch,
   lever, financial, engine constant), with where it lives, its owner and the

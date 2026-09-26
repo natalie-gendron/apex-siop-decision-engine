@@ -1,6 +1,29 @@
 # Design: customer dimension and allocation policy in the Monte Carlo
 
-Status: proposal for review (2026-09). Spike code: `spikes/customer_dimension/`.
+Status: **implemented** (build step 3, 2026-09). Spike code: `spikes/customer_dimension/`.
+
+## Outcome of step 3
+
+| Item | As built | Where |
+|---|---|---|
+| Unit of analysis | 15 demand lines (customer x family), each split into backlog and forecast slices | `operations.PlanningArrays` line arrays |
+| Demand shocks | Market factor (existing) x persistent customer shock, half shared with the customer group. Backlog: timing risk only, cancels at half the line rate. The spike's family sigma and month-to-month line noise were **not** adopted: no calibration source, and they would add unowned variance | `simulation.py` section 1 |
+| Push-outs | Whole line-month orders (one uniform draw per line-month), returning as backlog; pull-ins stay an expected share | `simulation.py` section 1 |
+| Allocation | Tiered, pro-rata within a tier and family, against what earlier tiers left; EMS least-contested first | `simulation.allocation_tiers` |
+| Policies | Strict priority, backlog first (**policy of record**); strict priority, priority first; proportional; protect top N (default 3). Priority first was added at the user's request after the comparison below | Sidebar, response axis |
+| Shorted orders | Wait as backlog by default; `config.customers.lost_after_months` loses them after N months per customer (owner: Sales). Tracked in age cohorts only when a limit is set | `simulation.py` section 4 |
+| Outputs | Revenue, contribution at standard cost, shipped, demand, lost revenue by customer and month; FY late unit-months | `SimulationResult.customer_*` |
+| Metrics | Customer table, top-1/3/5 concentration, priced policy comparison | `src/customers.py` |
+| One engine | Baseline = zero shocks, policy of record; exact | `tests/test_customers.py` |
+| Speed | 5,000 paths with KPIs and customer views: 0.6 s; the four-policy table at 2,000 paths: 0.8 s (float64, sims-first layout was fast enough) | `test_live_recompute_budget` |
+
+**Which strict priority?** Backlog first honors booked commitments for every
+customer before any forecast; priority first serves priority 1 completely
+before priority 2. With EMS at 85%, company revenue differs by under 0.1%,
+but a mostly-forecast priority-1 customer gets 92.9% fill under backlog first
+and 100% under priority first, while the priority-3 customer drops from 86.5%
+to 66.8%. Both are offered; SIOP picks.
+
 Nothing in `src/` changes until this design is agreed.
 
 ## 1. Summary

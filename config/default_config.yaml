@@ -40,6 +40,11 @@ uncertainty:
   ems_labor_sigma: 0.05
   site_disruption_impact: 0.35          # capacity lost in a disrupted site-month
 
+# Customer terms (owner: Sales). Shorted orders wait as backlog by default;
+# list a customer here to lose its unserved orders after N months.
+customers:
+  lost_after_months: {}             # e.g. {"Daehan Memory": 2}
+
 # Common-factor model. Factors are independent standard normals; every stochastic
 # variable loads on one or more factors. Loadings are correlations (bounded [-1, 1]);
 # the implied covariance is positive semidefinite by construction.
