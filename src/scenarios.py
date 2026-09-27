@@ -215,6 +215,10 @@ def describe_overrides(overrides: dict[str, Any]) -> str:
         elif key == "comp_supply_ramp":
             bits += [f"{'all components' if c == '__all__' else c}: supplier capacity "
                      f"×{x:g} from month {int(m) + 1}" for c, (m, x) in v.items()]
+        elif key == "buy_ahead":
+            bits += [f"{'all components' if c == '__all__' else c}: non-cancellable "
+                     f"buy of {x:g} months of cover, ordered month {int(m) + 1}"
+                     for c, (m, x) in v.items()]
         elif key == "recurring_cost":
             bits += [f"recurring cost ${usd / 1e3:,.0f}k/mo from month {int(m) + 1}"
                      for m, usd in v.values()]

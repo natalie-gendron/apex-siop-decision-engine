@@ -27,6 +27,15 @@ financial answer.
 | Customer-level outputs | Revenue by customer (concentration) | pass (step 3) | Fixed: demand lines customer x family; `customer_revenue` and customer metrics | Yes: who gets shorted drives concentration risk (design commitment) | Make it propagate per `docs/design-customer-dimension.md` |
 | Zero-shock reconciliation | Sim with no shocks matches baseline FY revenue within 1% | pass (step 1) | Fixed: the baseline is the engine with `Shocks.zero()`; exact equality in `tests/test_engine_reconciliation.py` | Yes: the base case and the plan disagree ("two engines" defect) | Done |
 
+### Build step 6 (decision-catalog gaps)
+
+| Lever / mechanism | Expected behavior | Status | Mechanism | Changes a financial answer? |
+|---|---|---|---|---|
+| Buy-ahead, lead-time gated | Nothing changes before one lead time; stock rises when it lands | pass (6a) | `buy_ahead`: non-cancellable order of N months of cover, arriving after the lead time | Yes: timing of cash and inventory (D3) |
+| Buy-ahead when demand softens | Committed parts still arrive: year-end stock and E&O rise | pass (6a) | Buyers net the commitment out of later orders but cannot cancel it | Yes: the downside of an NCNR buy (D3, D8) |
+| Buy-ahead in a shortage | Committed parts protect shipments | pass (6a) | Parts land before the supplier cut bites | Yes: the upside of an NCNR buy (D3) |
+| E&O is a P&L charge | The FY provision lowers gross profit one for one | pass (6a) | Provision = year-end reserve less opening reserve, charged to COGS; inventory carried net | Yes: without it, no buy-ahead or buffer decision sees its E&O in EV (D3, D10) |
+
 ## Summary
 
 After build step 5, fourteen pass and one is xfail: component purchasing response, deferred by the user as calibration (the mechanism is built; the remaining gap is safety-stock sizing against lumpy demand). At discovery, five passed and ten were xfail. Nine of the ten original xfails failed the governing rule, because

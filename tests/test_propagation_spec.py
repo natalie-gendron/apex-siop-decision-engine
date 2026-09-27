@@ -285,3 +285,58 @@ def test_zero_shock_simulation_reconciles_to_baseline(sim, config, baseline):
             pushout_prob_add=-1.0, pullin_prob_add=-1.0, comp_disrupt_mult=0.0)
     base_fy = float(baseline.monthly["revenue_usd"].iloc[:12].sum())
     assert fy_mean(r.revenue) == pytest.approx(base_fy, rel=0.01)
+
+
+# ---------------------------------------------------------------------------
+# Build step 6a: buy-ahead as a non-cancellable purchase; E&O hits the P&L
+# ---------------------------------------------------------------------------
+
+FPGA_BUY = {"buy_ahead": {"High-End FPGA": (0, 2.0)}}   # 2 months of cover, ordered now
+
+
+def test_buy_ahead_cannot_arrive_before_lead_time(sim, pa):
+    """An order placed in month 1 arrives one lead time later: nothing
+    changes before then."""
+    base = sim("base")
+    buy = sim("fpga_buy_ahead", **FPGA_BUY)
+    c = pa.comp_names.index("High-End FPGA")
+    lt = int(np.ceil(pa.comp_lead_time[c] / 4.345))
+    np.testing.assert_allclose(buy.raw_inventory[:, :lt], base.raw_inventory[:, :lt])
+    assert buy.raw_inventory[:, lt].mean() > base.raw_inventory[:, lt].mean()
+
+
+def test_non_cancellable_buy_ahead_is_exposed_when_demand_softens(sim, pa):
+    """Demand -20%: the committed parts still arrive, so year-end stock and
+    E&O are higher than without the commitment."""
+    down = dict(demand_family_mult=_all(pa.families, 0.8))
+    plain = sim("demand_down", **down)
+    buy = sim("demand_down_fpga_buy", **down, **FPGA_BUY)
+    assert buy.raw_inventory[:, 11].mean() > plain.raw_inventory[:, 11].mean()
+    assert buy.eo_reserve.mean() > plain.eo_reserve.mean()
+
+
+def test_buy_ahead_protects_shipments_in_a_shortage(sim):
+    """FPGA shortage world: parts committed ahead of the cut protect
+    shipments."""
+    from src.scenarios import prebuilt_scenarios
+    world = prebuilt_scenarios()["Critical FPGA Shortage"].overrides
+    plain = sim("fpga_shortage", **world)
+    buy = sim("fpga_shortage_buy", **world, **FPGA_BUY)
+    assert fy_mean(buy.units_shipped) > fy_mean(plain.units_shipped)
+
+
+def test_eo_provision_is_charged_to_cogs(sim, data):
+    """E&O is a P&L charge: the FY provision (year-end reserve less the
+    opening reserve) lowers FY gross profit by the same amount. Higher
+    obsolescence risk changes nothing operational, only the reserve."""
+    lo, hi = data.components.copy(), data.components.copy()
+    lo["obsolescence_risk"] = 0.0
+    hi["obsolescence_risk"] = 1.0
+    r_lo = sim("obsolescence_low", _data=dataclasses.replace(data, components=lo))
+    r_hi = sim("obsolescence_high", _data=dataclasses.replace(data, components=hi))
+    np.testing.assert_allclose(r_hi.units_shipped, r_lo.units_shipped)
+    assert r_hi.eo_reserve.mean() > r_lo.eo_reserve.mean()
+    d_provision = r_hi.eo_provision.mean() - r_lo.eo_provision.mean()
+    d_gp = fy_mean(r_hi.gross_profit) - fy_mean(r_lo.gross_profit)
+    assert d_provision != 0
+    assert d_gp == pytest.approx(-d_provision, rel=1e-6)

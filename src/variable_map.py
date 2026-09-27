@@ -160,6 +160,10 @@ _ROWS: list[tuple[str, str, str, str, str, str]] = [
     ("comp_supply_ramp", "Lever", "src/simulation.py: default_params", "Action",
      "Scales supplier capacity by part from a start month (no sooner than "
      "the lead time for increases)", "Shipments, inventory"),
+    ("buy_ahead", "Lever", "src/simulation.py: default_params", "Action",
+     "Non-cancellable order of N months of cover, placed in a given month and "
+     "arriving one lead time later; stays on the books if demand softens",
+     "Shipments in a shortage, inventory, cash, E&O"),
     ("safety_stock_mult", "Lever", "src/simulation.py: default_params", "Action",
      "Scales the safety-stock policy, the buffer target buyers order toward",
      "Service, inventory, cash"),
@@ -224,7 +228,8 @@ _ROWS: list[tuple[str, str, str, str, str, str]] = [
      "Payables: days of purchases (parts received, other material, EMS "
      "conversion and freight billed)", "Working capital, cash"),
     ("eo_reserve_rate", "Financial", "config/default_config.yaml: financial", "Controller",
-     "Reserve rate on excess critical stock", "E&O"),
+     "Reserve rate on excess critical stock; the FY provision (year-end less "
+     "opening reserve) is charged to COGS", "E&O, gross margin, action EV"),
     ("revenue_plan_buffer", "Financial", "config/default_config.yaml: financial", "FP&A",
      "Declared but not read (the plan comes from financial_plan)", "None"),
     # ---- Engine constants (no owner yet) ---------------------------------------

@@ -63,6 +63,7 @@ class SimulationResult:
     expedite_cost: np.ndarray
     rework_cost: np.ndarray
     eo_reserve: np.ndarray           # (n_sims,) fiscal-year E&O reserve estimate
+    eo_provision: np.ndarray         # (n_sims,) FY P&L charge: year-end less opening reserve
     family_revenue: np.ndarray       # (n_sims, n_months, n_families)
     family_units: np.ndarray         # (n_sims, n_months, n_families) recognized
     family_shipped: np.ndarray       # (n_sims, n_months, n_families)

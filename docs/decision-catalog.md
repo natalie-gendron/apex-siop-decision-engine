@@ -93,6 +93,10 @@ comparison and recommendation); "baseline" is `src/baseline_plan.py::run_baselin
 
 ## D3. Buy ahead or commit non-cancellable long-lead parts
 
+*Build status (2026-09, step 6a): buy-ahead is a non-cancellable order gated
+by lead time; E&O from the resulting excess is charged to the P&L. Still
+missing: cancellation windows on open POs.*
+
 - **Question:** Do we place NCNR orders now for parts arriving in 6-9 months,
   accepting E&O risk if demand does not show?
 - **Owner:** VP Supply Chain; CFO for large commitments.
