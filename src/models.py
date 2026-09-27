@@ -85,6 +85,7 @@ class SimulationResult:
     binding_component: np.ndarray | None = None  # (n, M, F) index of ceiling component, -1 none
     component_consumed: np.ndarray | None = None  # (n, M, C) units consumed per month
     component_usable_supply: np.ndarray | None = None  # (n, M, C) cumulative usable supply
+    component_ordered: np.ndarray | None = None        # (n, M, C) receipts due (open POs, orders)
     # customer detail; customers ordered by FY plan revenue, largest first
     customers: list[str] = field(default_factory=list)
     customer_revenue: np.ndarray | None = None       # (n, M, Cu) recognized revenue

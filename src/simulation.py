@@ -249,6 +249,11 @@ def run_simulation(data: InputData, config: AppConfig,
         firm[:, a] -= firm[:, a] * in_fam * share
         fcst[:, a] -= fcst[:, a] * in_fam * share
 
+    # buyers read demand without the known, deterministic events below and
+    # plan for those events explicitly (a rescheduled order is not a demand
+    # change)
+    demand_signal = (firm + fcst) @ fam_onehot                         # (n, M, F)
+
     # known customer events: an upside ask arrives as booked orders; a
     # pull-in or push-out moves up to the units asked, landing as booked
     for label, e in p["customer_demand_edit"].items():
@@ -278,6 +283,7 @@ def run_simulation(data: InputData, config: AppConfig,
     firm = np.clip(firm, 0, None)
     fcst = np.clip(fcst, 0, None)
     demand = (firm + fcst) @ fam_onehot                                # (n, M, F)
+    known_events = bool(p["forced_pushout"] or p["customer_demand_edit"])
 
     # ------------------------------------------------------------------
     # 2. Component supply setup. Inside each part's lead time receipts are
@@ -370,6 +376,10 @@ def run_simulation(data: InputData, config: AppConfig,
     start_avail = pa.comp_on_hand.copy()                                # (C,)
     cum_req = np.cumsum(np.einsum("nmf,cf->nmc", demand, pa.comp_usage), axis=1)
     plan_cum = np.vstack([np.zeros((1, n_f)), np.cumsum(pa.demand_units, axis=0)])  # (M+1, F)
+    if known_events:
+        # cumulative part requirement of the known events' demand shifts
+        event_cum = np.concatenate([np.zeros((n_sims, 1, n_c)), np.cumsum(
+            np.einsum("nmf,cf->nmc", demand - demand_signal, pa.comp_usage), axis=1)], axis=1)
 
     received = np.zeros((n_sims, M, n_c))
     recovered = np.zeros((n_sims, M, n_c))
@@ -488,10 +498,13 @@ def run_simulation(data: InputData, config: AppConfig,
         slip = nom * delay_frac[:, m]
         rec_m = (nom - slip + pending_delay) * delivered[:, m]
         pool = slip + nom * (1.0 - delivered[:, m])
-        pending_delay = slip
         cum_supply += rec_m
         need = np.clip(cum_req[:, m] - cum_supply, 0, None)
         recov = np.minimum(pool * recovery[None, :], need)
+        # expediting pulls this month's slipped receipts in first (they then
+        # do not arrive again next month); any remainder is a broker buy
+        # against parts a disrupted supplier failed to deliver
+        pending_delay = slip - np.minimum(recov, slip)
         cum_supply += recov
         received[:, m] = rec_m + recov
         recovered[:, m] = recov
@@ -592,7 +605,7 @@ def run_simulation(data: InputData, config: AppConfig,
         # supplier capacity.
         lo = max(0, m - 2)
         plan_recent = pa.demand_units[lo:m + 1].sum(axis=0)[None, :]
-        run_rate = np.clip(np.divide(demand[:, lo:m + 1].sum(axis=1), plan_recent,
+        run_rate = np.clip(np.divide(demand_signal[:, lo:m + 1].sum(axis=1), plan_recent,
                                      out=np.ones((n_sims, n_f)), where=plan_recent > 1e-9),
                            0.5, 2.0)
         if m == 11:
@@ -604,6 +617,9 @@ def run_simulation(data: InputData, config: AppConfig,
             window = plan_cum[np.minimum(arrive + 1, M)] - plan_cum[m + 1]   # (C, F)
             # einsum, not @: identical paths must give bit-identical orders
             fcst_need = np.einsum("nf,cf->nc", run_rate, usage * window)  # (n, C)
+            if known_events:
+                fcst_need = fcst_need + (event_cum[:, np.minimum(arrive + 1, M), comp_ix]
+                                         - event_cum[:, m + 1, :])
             backlog_need = np.einsum("nf,cf->nc", backlog_path[:, m], usage)
             stock = np.clip(pa.comp_on_hand[None, :] + cum_received - cum_consumed, 0, None)
             due = (month_ix[None, :] > m) & (month_ix[None, :] < arrive[:, None])  # (C, M)
@@ -747,9 +763,11 @@ def run_simulation(data: InputData, config: AppConfig,
     eo_rm_end = (excess_rm * pa.comp_cost[None, :] * eo_rate[None, :]).sum(axis=1)
     eo_provision = eo_reserve - eo_opening                               # (n,)
     cogs[:, 11] += eo_provision
-    rm[:, :11] -= eo_opening
-    rm[:, 11:] -= eo_rm_end[:, None]
-    fg[:, 11:] -= (fg[:, 11] * 0.05)[:, None]
+    # a reserve never exceeds the stock it reserves against (released as the
+    # stock is used after year end)
+    rm[:, :11] -= np.minimum(eo_opening, rm_crit[:, :11])
+    rm[:, 11:] -= np.minimum(eo_rm_end[:, None], rm_crit[:, 11:])
+    fg[:, 11:] -= np.minimum((fg[:, 11] * 0.05)[:, None], fg[:, 11:])
     inventory = rm + wip + fg
 
     gross_profit = revenue - cogs
@@ -829,6 +847,7 @@ def run_simulation(data: InputData, config: AppConfig,
         component_consumed=(np.einsum("nmf,cf->nmc", ship, usage)
                             if keep_component_paths else None),
         component_usable_supply=comp_avail if keep_component_paths else None,
+        component_ordered=nominal if keep_component_paths else None,
     )
 
 

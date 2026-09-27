@@ -139,7 +139,7 @@ def test_relieving_ems_capacity_exposes_next_constraint(sim, pa):
     # the plateau is set by components, not capacity (expected value: since
     # step 4 a rare path can release a component-starved backlog that briefly
     # exceeds even tripled capacity)
-    assert ems3.capacity_shortfall_units.sum(axis=1).mean() < 0.1
+    assert ems3.capacity_shortfall_units[:, :12].sum(axis=1).mean() < 0.1   # FY, as below
     assert ems3.component_short_units[:, :12].sum(axis=1).mean() > 10
     assert service_level(ems3).mean() < 0.999
 
@@ -428,3 +428,28 @@ def test_unknown_customer_edit_is_rejected(data, config):
     with pytest.raises(KeyError):
         run_simulation(data, config, n_sims=2, params={"customer_demand_edit": {
             "x": {"customer": "Nobody Inc", "month": 1, "units": 1}}})
+
+
+def test_expediting_cannot_create_parts_nobody_ordered(data, config, pa):
+    """With no supplier disruptions, expediting only pulls late receipts in:
+    cumulative receipts never exceed cumulative orders."""
+    from src.shocks import Shocks
+    r = run_simulation(data, config, n_sims=200, seed=7, keep_component_paths=True,
+                       shocks=Shocks(component_disruption=0.0),
+                       params={"expedite_recovery": 1.0, "lead_time_mult": 1.5})
+    received = r.component_usable_supply - pa.comp_on_hand[None, None, :]
+    ordered = np.cumsum(r.component_ordered, axis=1)
+    assert (received <= ordered + 1e-6).all()
+
+
+def test_known_push_out_inside_the_year_leaves_fy_units_unchanged(data, config):
+    """Zero shocks: a customer push-out from month 2 to month 5 moves
+    shipments between quarters, not out of the year. Buyers plan for the
+    known event instead of reading it as a demand drop."""
+    from src.scenarios import prebuilt_scenarios
+    from src.shocks import Shocks
+    event = prebuilt_scenarios()["Major Customer Push-Out"].overrides
+    base = run_simulation(data, config, n_sims=1, shocks=Shocks.zero())
+    moved = run_simulation(data, config, n_sims=1, shocks=Shocks.zero(), params=event)
+    assert fiscal_year(moved.units_shipped)[0] == pytest.approx(fiscal_year(base.units_shipped)[0])
+    assert moved.units_shipped[0, :3].sum() < base.units_shipped[0, :3].sum()

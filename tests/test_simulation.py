@@ -25,6 +25,9 @@ def test_outputs_finite_and_bounded(base_result):
     assert np.isfinite(base_result.revenue).all()
     assert (base_result.revenue >= 0).all()
     assert (base_result.inventory >= 0).all()
+    # net of the E&O reserve, no inventory class may go negative
+    assert (base_result.fg_inventory >= 0).all()
+    assert (base_result.raw_inventory >= 0).all()
     gm = base_result.gross_margin
     assert (gm <= 1.0).all() and (gm >= -1.0).all()
     assert (base_result.ems_utilization >= 0).all()
