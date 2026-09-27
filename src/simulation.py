@@ -42,6 +42,9 @@ def default_params() -> dict[str, Any]:
         "cancel_prob_mult": 1.0,
         "asp_mult": 1.0,
         "forced_pushout": None,          # {"family":, "from_month":, "to_month":, "units":}
+        "customer_demand_edit": {},      # name -> {"customer", "family" (optional), "month",
+                                         # "units", "to_month" (optional)}: a known customer
+                                         # event; no to_month = upside ask, else pull-in/push-out
         "lost_after_months": {},         # customer -> months before a shorted order is lost
                                          # (overrides config.customers per key; what-if only)
         # allocation policy (SIOP-owned, response axis)
@@ -245,6 +248,32 @@ def run_simulation(data: InputData, config: AppConfig,
         firm[:, b] += tot_a * share
         firm[:, a] -= firm[:, a] * in_fam * share
         fcst[:, a] -= fcst[:, a] * in_fam * share
+
+    # known customer events: an upside ask arrives as booked orders; a
+    # pull-in or push-out moves up to the units asked, landing as booked
+    for label, e in p["customer_demand_edit"].items():
+        if e["customer"] not in pa.customers:
+            raise KeyError(f"customer_demand_edit '{label}': unknown customer {e['customer']!r}")
+        mask = lcust == pa.customers.index(e["customer"])
+        if e.get("family"):
+            mask &= lfam == fams.index(e["family"])
+        if not mask.any():
+            raise KeyError(f"customer_demand_edit '{label}': no demand line for "
+                           f"{e['customer']!r} / {e.get('family')!r}")
+        m0, units = int(e["month"]), float(e["units"])
+        if e.get("to_month") is None:
+            plan_m = (pa.line_backlog[m0] + pa.line_forecast[m0]) * mask
+            w = plan_m / plan_m.sum() if plan_m.sum() > 0 else mask / mask.sum()
+            firm[:, m0] += units * w[None, :]
+        else:
+            to = int(e["to_month"])
+            here = (firm[:, m0] + fcst[:, m0]) * mask
+            total = here.sum(axis=1, keepdims=True)
+            share = np.divide(np.minimum(total, units), total,
+                              out=np.zeros_like(total), where=total > 1e-12)
+            firm[:, to] += here * share
+            firm[:, m0] -= firm[:, m0] * mask * share
+            fcst[:, m0] -= fcst[:, m0] * mask * share
 
     firm = np.clip(firm, 0, None)
     fcst = np.clip(fcst, 0, None)

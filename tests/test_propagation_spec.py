@@ -370,3 +370,61 @@ def test_second_source_changes_nothing_without_disruptions(sim):
     two = sim("calm_dual_fpga", **calm, **MORE_FPGA, **SECOND_SOURCE)
     np.testing.assert_allclose(two.units_shipped, one.units_shipped)
     np.testing.assert_allclose(two.revenue, one.revenue)
+
+
+# ---------------------------------------------------------------------------
+# Build step 6c: customer-specific demand events (D7 upside, D9 push-out)
+# ---------------------------------------------------------------------------
+
+TITAN_ASK = {"customer_demand_edit": {"titan_ask": {
+    "customer": "Titan Semiconductor", "family": "Zenith Compute Test",
+    "month": 3, "units": 12}}}
+
+
+def _cust(r, name):
+    return r.customers.index(name)
+
+
+def test_customer_upside_adds_demand_and_revenue_to_that_customer(sim):
+    base = sim("base")
+    ask = sim("titan_ask", **TITAN_ASK)
+    i = _cust(base, "Titan Semiconductor")
+    d_dem = ask.customer_demand[:, :, i].sum(axis=1).mean() - base.customer_demand[:, :, i].sum(axis=1).mean()
+    assert d_dem == pytest.approx(12.0, rel=1e-6)
+    others = [j for j in range(len(base.customers)) if j != i]
+    np.testing.assert_allclose(ask.customer_demand[:, :, others], base.customer_demand[:, :, others])
+    assert ask.customer_revenue[:, :12, i].sum(axis=1).mean() > \
+        base.customer_revenue[:, :12, i].sum(axis=1).mean()
+
+
+def test_customer_upside_displaces_lower_priority_customers(sim, pa):
+    """EMS tight, strict priority: a priority-1 customer's upside is served
+    ahead of priority-3 demand, which ships less."""
+    tight = {"ems_capacity_mult": _all(pa.site_names, 0.85)}
+    base = sim("ems_085", **tight)
+    ask = sim("ems_085_titan_ask", **tight, **TITAN_ASK)
+    j = _cust(base, "Meridian Micro Devices")                  # priority 3
+    assert ask.customer_shipped[:, :12, j].sum(axis=1).mean() < \
+        base.customer_shipped[:, :12, j].sum(axis=1).mean()
+
+
+def test_customer_push_out_moves_that_customers_revenue_later(sim):
+    """A named customer pushes Zenith systems from month 2 to month 5: it
+    moves up to the units asked (a path whose month-2 order already slipped
+    has less to move), so Q1 demand falls by at most that and the customer's
+    horizon demand is unchanged."""
+    push = {"customer_demand_edit": {"kestrel_push": {
+        "customer": "Kestrel Compute", "family": "Zenith Compute Test",
+        "month": 1, "units": 6, "to_month": 4}}}
+    base = sim("base")
+    moved = sim("kestrel_push", **push)
+    i = _cust(base, "Kestrel Compute")
+    q1 = lambda r: r.customer_demand[:, :3, i].sum(axis=1).mean()
+    assert 0.0 < q1(base) - q1(moved) <= 6.0 + 1e-9
+    assert moved.customer_demand[:, :, i].sum() == pytest.approx(base.customer_demand[:, :, i].sum())
+
+
+def test_unknown_customer_edit_is_rejected(data, config):
+    with pytest.raises(KeyError):
+        run_simulation(data, config, n_sims=2, params={"customer_demand_edit": {
+            "x": {"customer": "Nobody Inc", "month": 1, "units": 1}}})

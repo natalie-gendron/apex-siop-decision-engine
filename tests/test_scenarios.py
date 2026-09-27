@@ -19,7 +19,7 @@ def test_prebuilt_scenarios_are_exogenous_worlds():
     """Scenarios are world-states: no decision costs (responses live in the
     management-action catalog)."""
     scens = prebuilt_scenarios()
-    assert len(scens) == 8
+    assert len(scens) == 9
     assert "Base Case" in scens
     assert all(s.action_cost_usd == 0.0 for s in scens.values())
 

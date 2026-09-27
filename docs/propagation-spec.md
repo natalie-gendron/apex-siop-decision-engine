@@ -37,6 +37,9 @@ financial answer.
 | E&O is a P&L charge | The FY provision lowers gross profit one for one | pass (6a) | Provision = year-end reserve less opening reserve, charged to COGS; inventory carried net | Yes: without it, no buy-ahead or buffer decision sees its E&O in EV (D3, D10) |
 | Second source under supplier disruption | Ships more than the same extra capacity from one source | pass (6b) | `dual_source`: a share of volume on an alternate source with independent disruption draws | Yes: the insurance value of dual-sourcing (D5) |
 | Second source without disruption | Changes nothing | pass (6b) | Same, with no disruptions to insure against | Guards against a lever that pays in calm worlds |
+| Customer upside ask | That customer's demand rises by exactly the ask; revenue follows; nobody else's demand moves | pass (6c) | `customer_demand_edit` without `to_month`: booked orders added to the customer's lines | Yes: revenue and timing of a commit decision (D7) |
+| Upside displaces lower priority | EMS tight, strict priority: the priority-3 customer ships less | pass (6c) | Upside is booked, so it is served in the backlog tiers | Yes: who pays for saying yes (D7) |
+| Customer push-out | Moves up to the units asked from that customer's month; its horizon demand unchanged | pass (6c) | `customer_demand_edit` with `to_month` | Yes: revenue timing by customer (D9) |
 
 ## Summary
 

@@ -147,6 +147,9 @@ _ROWS: list[tuple[str, str, str, str, str, str]] = [
      "Scales cancellation odds", "Revenue"),
     ("asp_mult", "Lever", "src/simulation.py: default_params", "Scenario",
      "Scales selling price", "Revenue, GM"),
+    ("customer_demand_edit", "Lever", "src/simulation.py: default_params", "Scenario",
+     "A known customer event: an upside ask (booked) or a pull-in or push-out "
+     "of that customer's orders", "Customer revenue and fill, displacement"),
     ("forced_pushout", "Lever", "src/simulation.py: default_params", "Scenario",
      "Moves a named quantity of a family from one month to another", "Revenue timing"),
     ("lead_time_mult", "Lever", "src/simulation.py: default_params", "Scenario",

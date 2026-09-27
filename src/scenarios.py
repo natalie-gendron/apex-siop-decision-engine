@@ -42,10 +42,21 @@ def prebuilt_scenarios() -> dict[str, ScenarioSpec]:
             {"demand_market_mult": {"Memory": memory_delay}}),
         ScenarioSpec(
             "Major Customer Push-Out",
-            "A large compute customer shifts ~15 Zenith systems from mid-Q1 into "
-            "Q2 (acceptance-based recognition moves the revenue with them).",
-            {"forced_pushout": {"family": "Zenith Compute Test",
-                                "from_month": 1, "to_month": 4, "units": 15}}),
+            "Kestrel Compute shifts ~15 Zenith systems from month 2 into month 5, "
+            "Q1 into Q2 (acceptance-based recognition moves the revenue with "
+            "them).",
+            {"customer_demand_edit": {"kestrel_zenith_push": {
+                "customer": "Kestrel Compute", "family": "Zenith Compute Test",
+                "month": 1, "units": 15, "to_month": 4}}}),
+        ScenarioSpec(
+            "Key Customer Upside Request",
+            "Titan Semiconductor asks for 12 more Zenith systems in month 4. "
+            "Under the allocation policy of record it is served ahead of "
+            "lower-priority demand; the Demand & Backlog customer table shows "
+            "whose shipments it displaces.",
+            {"customer_demand_edit": {"titan_zenith_upside": {
+                "customer": "Titan Semiconductor", "family": "Zenith Compute Test",
+                "month": 3, "units": 12}}}),
         ScenarioSpec(
             "Critical FPGA Shortage",
             "High-end FPGA receipts fall 30%, lead times stretch 35%, and expedite "
@@ -215,6 +226,14 @@ def describe_overrides(overrides: dict[str, Any]) -> str:
         elif key == "comp_supply_ramp":
             bits += [f"{'all components' if c == '__all__' else c}: supplier capacity "
                      f"×{x:g} from month {int(m) + 1}" for c, (m, x) in v.items()]
+        elif key == "customer_demand_edit":
+            for e in v.values():
+                what = f"{e['customer']}" + (f" {e['family']}" if e.get("family") else "")
+                if e.get("to_month") is None:
+                    bits.append(f"{what}: +{e['units']:g} systems asked for month {int(e['month']) + 1}")
+                else:
+                    bits.append(f"{what}: {e['units']:g} systems move from month "
+                                f"{int(e['month']) + 1} to month {int(e['to_month']) + 1}")
         elif key == "dual_source":
             bits += [f"{c}: {x:.0%} of volume on an independent second source from "
                      f"month {int(m) + 1}" for c, (m, x) in v.items()]
