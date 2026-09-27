@@ -17,7 +17,7 @@ class InputData:
     components: pd.DataFrame      # critical component master
     ems_capacity: pd.DataFrame    # EMS site x month capacity assumptions
     ems_sites: pd.DataFrame       # EMS site master
-    integration_capacity: pd.DataFrame  # integration site x month
+    integration_capacity: pd.DataFrame  # integration site x month (not read: integration is at the EMS)
     financial_plan: pd.DataFrame  # month-level revenue plan and targets
     seed: int = 42
 
@@ -31,7 +31,6 @@ class BaselineResult:
     family_revenue: pd.DataFrame     # recognized revenue, family x month
     site_load: pd.DataFrame          # EMS site x month builds (std-equivalent)
     site_capacity: pd.DataFrame      # EMS site x month available capacity
-    integration_load: pd.DataFrame   # integration site x month load vs capacity
     component_usage: pd.DataFrame    # component x month consumption vs supply
     constraints: pd.DataFrame        # constraint log (month, type, detail, units lost)
     unmet: pd.DataFrame              # unmet demand by family x month
@@ -40,6 +39,7 @@ class BaselineResult:
     supply_units: np.ndarray         # (n_months, n_families) constrained builds
     revenue_plan_q: np.ndarray       # quarterly revenue plan (6,)
     revenue_plan_m: np.ndarray       # monthly revenue plan (18,)
+    customer_revenue: pd.DataFrame | None = None  # month x customer, baseline allocation
 
 
 @dataclass
@@ -70,13 +70,29 @@ class SimulationResult:
     units_shipped: np.ndarray        # (n_sims, n_months)
     units_demanded: np.ndarray       # (n_sims, n_months)
     ems_utilization: np.ndarray      # (n_sims, n_months)
-    integration_utilization: np.ndarray
     capacity_shortfall_units: np.ndarray   # (n_sims, n_months)
     component_short_units: np.ndarray      # (n_sims, n_months)
     component_binding: dict[str, np.ndarray] = field(default_factory=dict)  # name -> (n_sims,) bool
     site_disrupted: dict[str, np.ndarray] = field(default_factory=dict)
     drivers: dict[str, np.ndarray] = field(default_factory=dict)  # sampled inputs for sensitivity
     params: dict[str, Any] = field(default_factory=dict)
+    # allocation detail (per path); the baseline supply plan reads path 0
+    family_backlog: np.ndarray | None = None   # (n, M, F) end-of-month unmet (past-due)
+    site_load: np.ndarray | None = None        # (n, S, M) std-units built per EMS site
+    site_capacity: np.ndarray | None = None    # (n, S, M) effective std-unit capacity
+    limit_units: np.ndarray | None = None      # (2, n, M, F) cut by component / EMS capacity
+    binding_component: np.ndarray | None = None  # (n, M, F) index of ceiling component, -1 none
+    component_consumed: np.ndarray | None = None  # (n, M, C) units consumed per month
+    component_usable_supply: np.ndarray | None = None  # (n, M, C) cumulative usable supply
+    # customer detail; customers ordered by FY plan revenue, largest first
+    customers: list[str] = field(default_factory=list)
+    customer_revenue: np.ndarray | None = None       # (n, M, Cu) recognized revenue
+    customer_gross_profit: np.ndarray | None = None  # (n, M, Cu) revenue less standard cost
+    customer_shipped: np.ndarray | None = None       # (n, M, Cu) units shipped
+    customer_demand: np.ndarray | None = None        # (n, M, Cu) units requested (after timing)
+    customer_lost_revenue: np.ndarray | None = None  # (n, M, Cu) orders lost after waiting, at ASP
+    customer_late_unit_months: np.ndarray | None = None  # (n, Cu) FY sum of past-due units
+    family_lost: np.ndarray | None = None            # (n, M, F) orders lost after waiting, units
 
     @property
     def gross_margin(self) -> np.ndarray:

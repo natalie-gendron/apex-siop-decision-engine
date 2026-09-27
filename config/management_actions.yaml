@@ -83,14 +83,6 @@ actions:
         EMS Taiwan: [2, 3.0]
         EMS Malaysia: [2, -2.0]
 
-  - name: Add temporary integration capacity
-    description: Contract labor and a second shift add 8% final-integration
-      capacity from month 2 (hiring and training latency).
-    horizon: Tactical
-    action_cost_usd: 3.5e6
-    overrides:
-      integration_capacity_ramp: [1, 1.08]
-
   - name: Pre-build standard subassemblies
     description: Advance-buy 5% of component receipts from month 2 to de-risk
       assembly starts.
@@ -140,10 +132,3 @@ actions:
       add_qualification:
         - [EMS Eastern Europe, Zenith Compute Test, 9]
 
-  - name: Expand final-integration headcount
-    description: Permanent staffing adds 12% integration capacity from month 7
-      (requisition, hiring and certification ramp).
-    horizon: Long-lead
-    action_cost_usd: 6.0e6
-    overrides:
-      integration_capacity_ramp: [6, 1.12]

@@ -38,8 +38,12 @@ uncertainty:
   conversion_cost_sigma: 0.03
   freight_sigma: 0.10
   ems_labor_sigma: 0.05
-  utilization_adherence_penalty: 0.12   # adherence loss at 100% utilization
   site_disruption_impact: 0.35          # capacity lost in a disrupted site-month
+
+# Customer terms (owner: Sales). Shorted orders wait as backlog by default;
+# list a customer here to lose its unserved orders after N months.
+customers:
+  lost_after_months: {}             # e.g. {"Daehan Memory": 2}
 
 # Common-factor model. Factors are independent standard normals; every stochastic
 # variable loads on one or more factors. Loadings are correlations (bounded [-1, 1]);

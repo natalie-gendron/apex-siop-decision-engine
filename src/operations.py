@@ -1,8 +1,8 @@
 """Operational planning aggregates shared by the baseline plan and the simulator.
 
 Converts the generated input tables into dense numpy structures:
-demand by family/month, EMS capacity by site/month, component supply pipelines,
-and integration capacity. All units follow the input tables; EMS capacity uses
+demand by family/month, EMS capacity by site/month (final integration and test
+included), and component supply pipelines. All units follow the input tables; EMS capacity uses
 "standard-equivalent systems" where a family's configuration complexity weights
 its capacity consumption.
 """
@@ -41,8 +41,6 @@ class PlanningArrays:
     site_ot_premium: np.ndarray       # (n_sites,) overtime premium as % of conversion cost
     site_disrupt_prob: np.ndarray     # (n_sites,)
     site_qual: np.ndarray             # (n_sites, n_fam) 1 if family qualified
-    integration_capacity: np.ndarray  # (n_months,) total systems/month across sites
-    installation_capacity: np.ndarray # (n_months,)
     comp_names: list[str]
     comp_on_hand: np.ndarray          # (n_comp,)
     comp_po_monthly: np.ndarray       # (n_comp,)
@@ -59,6 +57,19 @@ class PlanningArrays:
     pullin_prob: np.ndarray           # (n_fam,)
     cancel_prob: np.ndarray           # (n_fam,)
     site_readiness: np.ndarray        # (n_fam,) demand-weighted readiness probability
+    # demand lines: one per customer x family (the unit of allocation)
+    customers: list[str]              # sorted by FY demand-plan revenue, largest first
+    cust_priority: np.ndarray         # (n_cust,) 1 = highest
+    cust_group: np.ndarray            # (n_cust,) group index (correlated demand shocks)
+    line_cust: np.ndarray             # (n_lines,) customer index
+    line_fam: np.ndarray              # (n_lines,) family index
+    line_backlog: np.ndarray          # (n_months, n_lines) booked backlog units
+    line_forecast: np.ndarray         # (n_months, n_lines) unbooked forecast units
+    line_asp: np.ndarray              # (n_lines,)
+    line_push: np.ndarray             # (n_months, n_lines) push-out probability
+    line_pull: np.ndarray             # (n_months, n_lines) pull-in probability
+    line_cancel: np.ndarray           # (n_months, n_lines) cancellation probability
+    line_readiness: np.ndarray        # (n_lines,) customer site-readiness probability
 
 
 def build_planning_arrays(data: InputData) -> PlanningArrays:
@@ -116,13 +127,6 @@ def build_planning_arrays(data: InputData) -> PlanningArrays:
         for s in qualified:
             site_qual[s_ix[s], fam_ix[fam]] = 1.0
 
-    integ = data.integration_capacity
-    integration_capacity = np.zeros(N_MONTHS)
-    installation_capacity = np.zeros(N_MONTHS)
-    for _, r in integ.iterrows():
-        j = m_ix[r["month"]]
-        integration_capacity[j] += r["integration_capacity_units"] * r["labor_availability"]
-        installation_capacity[j] += r["installation_capacity_units"]
 
     comp = data.components
     comp_usage = np.zeros((len(comp), n_f))
@@ -130,6 +134,38 @@ def build_planning_arrays(data: InputData) -> PlanningArrays:
         for fam in str(r["products_using"]).split(";"):
             if fam in fam_ix:
                 comp_usage[k, fam_ix[fam]] = r["usage_per_system"]
+
+    # demand lines (customer x family); customers ordered by FY plan revenue
+    dem["fy_rev"] = np.where(dem["month"].map(m_ix) < 12, dem["units"] * dem["asp_usd"], 0.0)
+    customers = (dem.groupby("customer")["fy_rev"].sum()
+                 .sort_values(ascending=False, kind="stable").index.tolist())
+    c_ix = {c: i for i, c in enumerate(customers)}
+    cmaster = dem.groupby("customer").agg(priority=("customer_priority", "first"),
+                                          group=("customer_group", "first")).loc[customers]
+    groups = sorted(cmaster["group"].unique())
+    lines = sorted({(c_ix[c], fam_ix[f]) for c, f in zip(dem["customer"], dem["product_family"])})
+    l_ix = {key: i for i, key in enumerate(lines)}
+    n_l = len(lines)
+    line_backlog = np.zeros((N_MONTHS, n_l))
+    line_forecast = np.zeros((N_MONTHS, n_l))
+    line_push = np.zeros((N_MONTHS, n_l))
+    line_pull = np.zeros((N_MONTHS, n_l))
+    line_cancel = np.zeros((N_MONTHS, n_l))
+    line_asp = np.zeros(n_l)
+    line_ready_num = np.zeros(n_l)
+    line_ready_den = np.zeros(n_l)
+    for r in dem.itertuples(index=False):
+        li = l_ix[(c_ix[r.customer], fam_ix[r.product_family])]
+        j = m_ix[r.month]
+        line_backlog[j, li] += r.backlog_units
+        line_forecast[j, li] += r.base_forecast_units
+        line_push[j, li] = r.push_out_prob
+        line_pull[j, li] = r.pull_in_prob
+        line_cancel[j, li] = r.cancel_prob
+        line_asp[li] = r.asp_usd
+        w = max(r.units, 0.01)
+        line_ready_num[li] += r.site_readiness_prob * w
+        line_ready_den[li] += w
 
     fin = data.financial_plan.set_index("month").reindex(months)
     revenue_plan_m = fin["revenue_plan_usd"].to_numpy(float)
@@ -147,8 +183,6 @@ def build_planning_arrays(data: InputData) -> PlanningArrays:
         site_labor=site_labor, site_fpy=site_fpy, site_cost=site_cost,
         site_ot_premium=site_ot_premium,
         site_disrupt_prob=site_disrupt, site_qual=site_qual,
-        integration_capacity=integration_capacity,
-        installation_capacity=installation_capacity,
         comp_names=comp["component"].tolist(),
         comp_on_hand=comp["on_hand_units"].to_numpy(float),
         comp_po_monthly=comp["open_po_units_per_month"].to_numpy(float),
@@ -162,6 +196,13 @@ def build_planning_arrays(data: InputData) -> PlanningArrays:
         revenue_plan_m=revenue_plan_m,
         pushout_prob=wavg("push_out_prob"), pullin_prob=wavg("pull_in_prob"),
         cancel_prob=wavg("cancel_prob"), site_readiness=wavg("site_readiness_prob"),
+        customers=customers,
+        cust_priority=cmaster["priority"].to_numpy(int),
+        cust_group=np.array([groups.index(g) for g in cmaster["group"]]),
+        line_cust=np.array([c for c, _ in lines]), line_fam=np.array([f for _, f in lines]),
+        line_backlog=line_backlog, line_forecast=line_forecast, line_asp=line_asp,
+        line_push=line_push, line_pull=line_pull, line_cancel=line_cancel,
+        line_readiness=line_ready_num / line_ready_den,
     )
 
 
@@ -172,3 +213,24 @@ def effective_site_capacity(pa: PlanningArrays, overtime: bool = False) -> np.nd
     if overtime:
         cap = cap + pa.site_overtime
     return cap
+
+
+def standard_unit_cost(data: InputData, families: list[str],
+                       fpy: float) -> dict[str, np.ndarray]:
+    """The one unit-cost policy, per family: standard cost build-up plus scrap
+    and expected rework (units failing first pass reworked at half conversion
+    cost). COGS applies cost shocks to the components; finished goods are
+    valued at `standard`."""
+    prod = data.products.set_index("product_family").loc[families]
+    out = {
+        "material": prod["material_cost_usd"].to_numpy(float),
+        "conversion": prod["ems_conversion_cost_usd"].to_numpy(float),
+        "integration": prod["integration_test_cost_usd"].to_numpy(float),
+        "freight": prod["freight_cost_usd"].to_numpy(float),
+        "warranty": prod["warranty_reserve_usd"].to_numpy(float),
+        "scrap": (prod["scrap_prob"] * prod["material_cost_usd"]).to_numpy(float),
+    }
+    out["rework"] = (1.0 - fpy) * 0.5 * out["conversion"]
+    out["standard"] = sum(out[k] for k in ("material", "conversion", "integration",
+                                           "freight", "warranty", "scrap", "rework"))
+    return out

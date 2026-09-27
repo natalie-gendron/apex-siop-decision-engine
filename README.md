@@ -4,7 +4,7 @@ A working Version-1 prototype of an executive decision-support system for the
 monthly SIOP (Sales, Inventory & Operations Planning) cycle of a fictional
 automated test equipment (ATE) manufacturer, **Apex Test Systems**. It connects
 operating uncertainty — demand cycles, customer push-outs, component shortages,
-EMS capacity, integration throughput, acceptance timing — to the financial
+EMS capacity (final integration and test included), acceptance timing — to the financial
 outcomes a COO, a VP of Global Operations Finance and a Director of SIOP
 actually manage: revenue attainment probability, gross margin, inventory,
 working capital and cash.
@@ -37,7 +37,7 @@ comparison  →  sensitivity ranking  →  recommendations  →  executive summa
 | `src/data_generator.py` | Seeded synthetic tables: demand (customer × family × month), products/BOM, 30 critical components, EMS sites & monthly capacity, integration capacity, financial plan |
 | `src/validation.py` | Input validation (probabilities, bounds, horizon alignment, qualification integrity), PSD check/repair, friendly messages |
 | `src/operations.py` | Dense planning arrays shared by baseline and simulator |
-| `src/baseline_plan.py` | Deterministic monthly plan via a documented greedy heuristic |
+| `src/baseline_plan.py` | Baseline supply plan: the engine run with zero shocks, one path |
 | `src/correlations.py` | Common-factor model (8 factors, AR(1) paths); PSD by construction |
 | `src/simulation.py` | Vectorized correlated Monte Carlo + full financial translation |
 | `src/scenarios.py` | 8 prebuilt scenarios (exogenous world-states), custom scenario, 14 management actions across SIOP horizons (combinable into response packages), KPI summary & comparison — see `docs/ARCHITECTURE.md` for the (world, response) evaluation-context model |
@@ -109,15 +109,14 @@ or to regenerate data. Results are cached and reproducible per seed.
 
 ## Baseline planning logic
 
-A transparent greedy heuristic (documented limitation: no cross-month
-optimization):
-
-1. Firm backlog before forecast; 2. higher customer priority; 3. earlier
-requested date; 4. higher contribution margin per standard-equivalent unit;
-5. only qualified EMS sites (least-contested site first, then cost);
-6. component availability, EMS capacity (derated by schedule adherence and
-labor) and final-integration capacity are hard constraints. Unmet demand rolls
-forward and ages; every shortfall is logged with its binding constraint.
+One engine: the baseline supply plan is `run_simulation` with
+`Shocks.zero()` and one path (`src/shocks.py`), so plan and simulation cannot
+disagree. Builds go only to qualified EMS sites (least-contested site first,
+then cost); component availability, EMS capacity (derated by each site's
+schedule adherence and labor; final integration and test happen at the EMS)
+are hard constraints. Unmet demand rolls forward and ages; each unit that misses its
+requested month is logged once with the constraint that cut it. No cross-month
+optimization.
 
 ## Monte Carlo methodology
 
@@ -134,13 +133,12 @@ forward and ages; every shortfall is logged with its binding constraint.
 - **Modeled uncertainty:** market and customer demand, pull-ins/push-outs/
   cancellations, ASP, component receipts/lateness/disruption/allocation,
   expedite recovery and premiums, EMS capacity/labor/adherence/yield/regional
-  disruption, utilization-dependent adherence erosion, integration capacity,
+  disruption,
   acceptance and site-readiness delays, cost variances.
-- **Hybrid granularity (documented):** the deterministic baseline runs at
-  customer/site/component detail; the simulator runs family × month with all
-  30 components and site capacities, rationing scarce supply proportionally
-  within each month. With zero shocks it reconciles to the baseline. 10,000
-  paths run in ~1-2 seconds on a laptop.
+- **Granularity:** family x month with all 30 components and site
+  capacities, rationing scarce supply proportionally within a family. With
+  zero shocks the engine is the baseline, exactly (tested). 5,000 paths run in
+  well under a second on a laptop.
 
 ## Financial translation
 
@@ -169,7 +167,7 @@ their scoring weights (EV 35%, probability 30%, revenue 20%, cash −15%).
 ## Test results
 
 `pytest` — **69 passed** (data reproducibility & validity, baseline
-feasibility vs component/EMS/integration constraints, financial identities,
+feasibility vs component and EMS constraints, financial identities,
 simulation reproducibility & bounds, correlation PSD & co-movement, all 8
 scenarios run, comparison reconciliation, equal-path-count action pricing,
 recommendation traceability & materiality, dynamic summary — including the
@@ -179,9 +177,10 @@ runs of the full dashboard).
 ## Known limitations (Version 1)
 
 - Monthly buckets; no weekly granularity.
-- Monte Carlo is family-level; customer-level detail lives in the baseline.
-- Greedy allocation, not optimization; proportional within-month rationing in
-  the simulator.
+- Allocation by customer x family line under a selectable SIOP policy
+  (strict priority backlog first by default); within a tier, pro-rata by
+  family.
+- Allocation heuristic, not optimization.
 - Simplified revenue recognition (0/1-month lag + stochastic slip), no
   balance-sheet FX, approximate overtime/reservation cost mechanics.
 - Recommendations evaluate actions independently (no combined-action search).

@@ -118,10 +118,6 @@ ACTION_RISK_MAP: dict[str, tuple[list[str], str]] = {
         ["revenue", "service"],
         "Transition friction temporarily reduces EMS Malaysia output; regional "
         "concentration risk increases."),
-    "Add temporary integration capacity": (
-        ["revenue", "service"],
-        "Contract labor first-pass completion is typically lower; ramp time is "
-        "not modeled."),
     "Pre-build standard subassemblies": (
         ["component", "revenue", "inventory"],
         "Increases WIP and raw inventory; exposure if configurations change."),
@@ -142,10 +138,6 @@ ACTION_RISK_MAP: dict[str, tuple[list[str], str]] = {
         ["revenue", "service"],
         "No relief for roughly three quarters; qualification timelines slip in "
         "practice, and early builds at a new site typically run lower yield."),
-    "Expand final-integration headcount": (
-        ["revenue", "service"],
-        "Permanent fixed-cost addition justified only by a sustained demand "
-        "level; benefit starts in the second half of the horizon."),
 }
 
 

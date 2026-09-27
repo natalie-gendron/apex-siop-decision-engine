@@ -48,9 +48,11 @@ from src.sensitivity import (
     quarter_shift_drivers,
     site_disruption_frequency,
 )
-from src.simulation import run_simulation
+from src.customers import concentration, customer_table, policy_comparison
+from src.simulation import ALLOCATION_POLICIES, default_params, run_simulation
 from src.utils import MARKET_SEGMENTS, fmt_money, fmt_pct, fmt_pts, month_labels
 from src.validation import validate_inputs
+from src.variable_map import LAYERS, variable_map
 from src import visualizations as viz
 
 st.set_page_config(page_title="Apex SIOP Decision Engine", page_icon="📊",
@@ -185,6 +187,26 @@ def cached_actions(data_seed: int, sim_seed: int, n_sims: int,
     return ref_kpi, out
 
 
+@st.cache_data(show_spinner=False)
+def cached_policies(data_seed: int, sim_seed: int, n_sims: int,
+                    confidence_level: str, context_key: str,
+                    _data: InputData, _baseline, _context: dict):
+    """Price every allocation policy in one world, on common random numbers
+    (same seed and path count), against proportional as the reference."""
+    conf = CONFIDENCE_SIM_PARAMS[confidence_level]
+    runs = {k: run_simulation(_data, CONFIG, _baseline,
+                              params=merge_confidence_params(
+                                  conf, {**_context, "allocation_policy": k}),
+                              n_sims=n_sims, seed=sim_seed, scenario_name=k)
+            for k in ALLOCATION_POLICIES}
+    table = policy_comparison(runs, reference="proportional")
+    fills = pd.DataFrame({
+        ALLOCATION_POLICIES[k]: (r.customer_shipped[:, :12].sum(axis=1)
+                                 / r.customer_demand[:, :12].sum(axis=1)).mean(axis=0)
+        for k, r in runs.items()}, index=runs["proportional"].customers)
+    return table, fills
+
+
 # ---------------------------------------------------------------------------
 # Sidebar
 # ---------------------------------------------------------------------------
@@ -258,6 +280,17 @@ package_names = st.sidebar.multiselect(
     help="Management actions evaluated together on top of the selected "
          "scenario, with their combined cost. Empty = no action taken. "
          "Also editable via the checkboxes on Management Recommendations.")
+DEFAULT_POLICY = default_params()["allocation_policy"]
+allocation_policy = st.sidebar.selectbox(
+    "Allocation policy (SIOP-owned)", list(ALLOCATION_POLICIES),
+    index=list(ALLOCATION_POLICIES).index(DEFAULT_POLICY),
+    format_func=lambda k: ALLOCATION_POLICIES[k]
+    + (" (policy of record)" if k == DEFAULT_POLICY else ""),
+    key="allocation_policy",
+    help="Who is served first when supply is short. A standing SIOP policy on "
+         "the response side: it moves revenue between customers and months, "
+         "and changes margin only through mix. The plan of record uses the "
+         "policy of record. Priced side by side on Management Recommendations.")
 
 custom_params: dict = {}
 if scenario_name == "Custom Scenario":
@@ -278,7 +311,6 @@ if scenario_name == "Custom Scenario":
         emsc = st.slider("EMS capacity multiplier", 0.7, 1.3, 1.0, 0.02)
         fpy = st.slider("EMS yield delta (pts)", -0.08, 0.05, 0.0, 0.01)
         adh = st.slider("Schedule adherence delta (pts)", -0.08, 0.04, 0.0, 0.01)
-        integ = st.slider("Integration capacity multiplier", 0.8, 1.3, 1.0, 0.02)
         freight = st.slider("Freight cost multiplier", 0.8, 2.0, 1.0, 0.05)
         exp_p = st.slider("Expedite premium multiplier", 0.5, 2.5, 1.0, 0.1)
         acc = st.slider("Acceptance delay probability (+pts)", 0.0, 0.3, 0.0, 0.02)
@@ -291,7 +323,6 @@ if scenario_name == "Custom Scenario":
             ("cancel_prob_mult", cancel, 1.0), ("asp_mult", aspm, 1.0),
             ("lead_time_mult", lt, 1.0), ("comp_disrupt_mult", dis, 1.0),
             ("fpy_delta", fpy, 0.0), ("adherence_delta", adh, 0.0),
-            ("integration_capacity_mult", integ, 1.0),
             ("freight_mult", freight, 1.0), ("expedite_premium_mult", exp_p, 1.0),
             ("acceptance_delay_add", acc, 0.0),
         ]:
@@ -405,10 +436,16 @@ base_result = sim_with_confidence(n_sims, "Base Case", {})
 # so (no duplicate simulation, no "conditioned on" banner for a null context)
 world_result = (base_result if not spec.overrides else
                 sim_with_confidence(n_sims, spec.name, spec.overrides))
-if package_specs:
+policy_changed = allocation_policy != DEFAULT_POLICY
+if package_specs or policy_changed:
+    response_bits = ([package_label] if package_specs else []) + (
+        [f"{ALLOCATION_POLICIES[allocation_policy].lower()} allocation"]
+        if policy_changed else [])
     context_label = ((f"{spec.name} + " if spec.name != "Base Case" else "")
-                     + package_label)
+                     + " + ".join(response_bits))
     final_overrides = merge_confidence_params(spec.overrides, package_overrides)
+    if policy_changed:
+        final_overrides["allocation_policy"] = allocation_policy
     # the sim spreads the one-time decision cost over Q1 operating income
     final_overrides["action_cost_usd"] = package_cost
     ctx_result = sim_with_confidence(n_sims, context_label, final_overrides)
@@ -707,6 +744,32 @@ with tabs[1]:
                "another family's demand). Set a scenario and response package "
                "in the sidebar to see projected delinquency for the world "
                "plus what we will do.")
+
+    st.markdown(f"#### Customers: who gets shorted — outcome view{ctx_suffix}")
+    conc = concentration(ctx_result, baseline)
+    ccols = st.columns(len(conc))
+    for col, (_, row) in zip(ccols, conc.iterrows()):
+        col.metric(f"{row['Group']} customers: share of FY revenue",
+                   fmt_pct(row["Share of FY revenue"]),
+                   f"revenue at risk {fmt_money(row['Revenue at risk'])}",
+                   delta_color="off")
+    prio = data.demand.groupby("customer")["customer_priority"].first().to_dict()
+    ctab = customer_table(ctx_result, baseline, prio)
+    money = ["Expected FY revenue", "P10 FY revenue", "Revenue at risk", "Supply gap",
+             "Lost revenue", "Expected FY contribution"]
+    st.dataframe(ctab.style.format({
+        **{c: lambda v: fmt_money(v) for c in money},
+        "Share of FY revenue": "{:.1%}", "FY fill rate": "{:.1%}",
+        "P(shortfall)": "{:.0%}", "Late unit-months per unit": "{:.2f}"}),
+        width='stretch', hide_index=True)
+    st.caption(
+        f"Allocation policy: {ALLOCATION_POLICIES[allocation_policy]}. Revenue "
+        "at risk = baseline FY revenue (plan-of-record allocation) minus the "
+        "P10 outcome; supply gap = the part caused by supply, not demand "
+        "(expected unshipped FY units at the customer's ASP); P(shortfall) = "
+        "chance FY fill falls below 95%. Shorted orders wait as backlog unless "
+        "a customer has a lost-after limit (config: customers). Contribution "
+        "is revenue less standard cost.")
 
     st.divider()
     st.caption("Everything below is plan-of-record over the full 18-month "
@@ -1017,7 +1080,6 @@ with tabs[5]:
            if c.startswith("units_")},
         "gross_margin": "{:.1%}",
         "ems_utilization": "{:.1%}",
-        "integration_utilization": "{:.1%}",
     }
     st.dataframe(baseline.monthly.style.format(monthly_fmt),
                  width='stretch', height=320)
@@ -1290,8 +1352,45 @@ with tabs[8]:
                 f"Edit in config/management_actions.yaml.  \n"
                 f"**Caveat:** {r.caveat}"))
 
+    st.markdown("#### Allocation policy: the cost of who gets shorted"
+                + (f" — if {spec.name} occurs" if conditioned else ""))
+    with st.spinner("Pricing allocation policies..."):
+        pol_table, pol_fills = cached_policies(
+            data_seed, sim_seed, min(n_sims, 2000), effective_level,
+            _params_key(spec.overrides), data, baseline, spec.overrides)
+    pol_table = pol_table.assign(Policy=pol_table["Policy"].map(
+        lambda k: ALLOCATION_POLICIES[k] + (" (policy of record)" if k == DEFAULT_POLICY else "")))
+    pol_money = ["Expected FY revenue", "Expected FY gross profit",
+                 "Δ gross profit vs reference", "Δ GP P10", "Δ GP P90"]
+    st.dataframe(pol_table.style.format({
+        **{c: lambda v: fmt_money(v) for c in pol_money},
+        "P(a top-3 customer short)": "{:.0%}", "Worst customer fill": "{:.1%}"}),
+        width='stretch', hide_index=True)
+    st.dataframe(pol_fills.style.format("{:.1%}"), width='stretch')
+    st.caption("Every allocation rule priced in the same simulated futures "
+               "(common random numbers) against proportional fair share. The "
+               "rule mostly moves service between customers, not company "
+               "margin: compare the gross-profit deltas with the spread in "
+               "FY fill by customer (second table). Short = FY fill below "
+               "95%. The policy of record drives the plan of record; choose "
+               "another in the sidebar to see its full outlook.")
+
 # ---------------------------- 9. Assumptions & Data ------------------------
 with tabs[9]:
+    st.markdown("#### Variable map: everything that can change a result")
+    st.caption("Every input the simulation reads, from how uncertain the world "
+               "is (volatility, event rates) to what Apex chooses to do "
+               "(levers). Engine constants are hard-coded assumptions with no "
+               "owner yet: calibration candidates. Which of these actually "
+               "moved the result in this run is on the Risk Drivers tab. "
+               "Source: src/variable_map.py (a test keeps it complete).")
+    vmap = variable_map()
+    layer_pick = st.radio("Layer", ["All"] + LAYERS, horizontal=True,
+                          key="variable_map_layer", label_visibility="collapsed")
+    if layer_pick != "All":
+        vmap = vmap[vmap["Layer"] == layer_pick]
+    st.dataframe(vmap, width='stretch', hide_index=True, height=360)
+
     st.markdown("#### Financial plan & targets")
     fin = CONFIG.financial
     st.dataframe(pd.DataFrame({
@@ -1507,14 +1606,15 @@ engine's planned next capability.
     st.markdown("#### Methodology")
     st.markdown(
         """
-**Baseline plan.** Deterministic greedy allocation by month: firm backlog before
-forecast, higher customer priority first, earlier requested date, then higher
-contribution margin per standard-equivalent unit. Builds go only to qualified
-EMS sites (least-contested site first, then cost) and respect component
-availability, EMS capacity (derated by adherence and labor), and final
-integration capacity. Unmet demand rolls forward and ages. The heuristic is
-transparent but greedy — it does not optimize across months; a MILP is a
-documented Version-2 candidate.
+**Baseline plan.** One engine: the baseline supply plan is the Monte Carlo
+engine run with every shock switched off, on a single path. It cannot
+disagree with the simulation on allocation, cost or inventory. Builds go only
+to qualified EMS sites (least-contested site first, then cost) and respect
+component availability, EMS capacity (derated by each site's scheduled
+adherence and labor; final integration and test happen at the EMS). Unmet demand rolls
+forward and ages; each unit that misses its requested month is logged once
+against the constraint that cut it. The allocation does not optimize across
+months; a MILP is a documented Version-2 candidate.
 
 **Monte Carlo.** Correlated common-factor model: eight factors (semicap cycle,
 AI/HPC, memory, mobile, auto/industrial, component tightness, logistics, EMS
@@ -1523,9 +1623,10 @@ loadings whose squared sum ≤ 1, so the implied correlation matrix is positive
 semidefinite by construction. Distributions are bounded: lognormal mean-one
 multipliers for demand/cost, Bernoulli disruption events, beta-shaped
 acceptance-slip fractions, clipped probabilities. Demand timing shocks
-(pull-ins, push-outs, cancellations) shift units between months; supply is
-rationed proportionally within each month (a vectorized approximation of the
-baseline priority order — documented simplification). Revenue recognizes at
+(pull-ins, push-outs, cancellations) shift units between months. Demand runs
+by customer and product family, split into booked backlog (timing risk only)
+and forecast; scarce supply is allocated under the SIOP allocation policy
+(sidebar), pro-rata within a policy tier. Revenue recognizes at
 shipment or one month later for acceptance-based families, with stochastic
 acceptance/site-readiness slip.
 
@@ -1538,9 +1639,9 @@ inventory + simplified receivables (DSO) − simplified payables (DPO). E&O is a
 reserve rate on critical-component stock above 2.5 months of forward usage
 plus 5% of aged finished goods.
 
-**Known simplifications.** Monthly buckets; family-level Monte Carlo (customer
-detail lives in the deterministic baseline); proportional within-month
-rationing; no balance-sheet FX; recognition simplified to a 0/1-month lag with
+**Known simplifications.** Monthly buckets; pro-rata within an allocation
+tier (no order-level sequencing); no
+balance-sheet FX; recognition simplified to a 0/1-month lag with
 stochastic slip; overtime/reservation costs approximated. A fast, credible
 prototype is preferred to an unusably detailed model — see README for the full
 list and Version-2 candidates.

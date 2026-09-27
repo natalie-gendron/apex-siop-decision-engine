@@ -8,7 +8,8 @@ from openpyxl import load_workbook
 from src.executive_report import ReportContext, get_provider
 from src.exports import build_excel_export
 from src.recommendations import build_recommendations, detect_risks
-from src.scenarios import kpi_summary, management_actions
+from src.market_intelligence import merge_confidence_params
+from src.scenarios import kpi_summary, management_actions, prebuilt_scenarios
 from src.sensitivity import (
     all_driver_rankings,
     binding_components,
@@ -18,17 +19,29 @@ from src.sensitivity import (
 from src.simulation import run_simulation
 
 
+# actions are priced in a stressed world: in the base world of the one engine
+# no revenue risk fires, and an empty recommendation list would make the
+# recommendation and export tests below vacuous
+STRESS_WORLD = "AI Surge with Supply Tightening"
+
+
 @pytest.fixture(scope="module")
 def pipeline(data, config, baseline, base_result):
-    base_kpi = kpi_summary(base_result, baseline, config)
-    binding = binding_components(base_result)
+    world = prebuilt_scenarios()[STRESS_WORLD].overrides
+    headline = run_simulation(data, config, baseline, params=world,
+                              n_sims=base_result.n_sims, seed=base_result.seed,
+                              scenario_name=STRESS_WORLD)
+    base_kpi = kpi_summary(headline, baseline, config)
+    binding = binding_components(headline)
     action_results = {}
-    for name, spec in list(management_actions().items())[:5]:
-        r = run_simulation(data, config, baseline, params=spec.overrides,
+    for name, spec in management_actions().items():
+        r = run_simulation(data, config, baseline,
+                           params=merge_confidence_params(world, spec.overrides),
                            n_sims=base_result.n_sims, seed=base_result.seed,
                            scenario_name=name)
         action_results[name] = (kpi_summary(r, baseline, config), spec)
     recs = build_recommendations(base_kpi, action_results, binding)
+    assert recs, "the stressed world must yield recommendations"
     return base_kpi, binding, action_results, recs
 
 
