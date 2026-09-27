@@ -94,12 +94,19 @@ def test_demand_up_when_ems_binds_raises_past_due_and_lowers_service(sim, pa):
         base.capacity_shortfall_units.sum(axis=1).mean()
 
 
-def test_demand_down_raises_component_inventory_and_eo(sim, pa):
-    """-20% demand with flat receipts: raw inventory builds, E&O rises."""
+def test_demand_down_raises_component_inventory_exposure(sim, pa):
+    """-20% demand: open POs inside the lead time keep arriving, so raw
+    inventory (cash tied up) builds through the lead-time window and is
+    higher on average over the year; revenue falls.
+
+    Restated 2026-09-27 (build step 4, user decision): with buyers
+    responding beyond the lead time, the excess is worked off by year end,
+    so year-end E&O no longer rises with a demand drop. Lasting E&O from a
+    drop belongs to obsolescence risk (step 5), not to this test."""
     base = sim("base")
     down = sim("demand_down", demand_family_mult=_all(pa.families, 0.8))
+    assert down.raw_inventory[:, 2].mean() > base.raw_inventory[:, 2].mean()   # Q1 end
     assert down.raw_inventory[:, :12].mean() > base.raw_inventory[:, :12].mean()
-    assert down.eo_reserve.mean() > base.eo_reserve.mean()
     assert fy_mean(down.revenue) < fy_mean(base.revenue)
 
 
@@ -129,16 +136,22 @@ def test_relieving_ems_capacity_exposes_next_constraint(sim, pa):
     assert fy_mean(ems3.units_shipped) == pytest.approx(
         fy_mean(ems15.units_shipped), rel=0.005)
     assert ems3.ems_utilization[:, :12].mean() < 0.5
-    # the plateau is set by components, not capacity
-    assert ems3.capacity_shortfall_units.sum() == pytest.approx(0.0, abs=1e-6)
+    # the plateau is set by components, not capacity (expected value: since
+    # step 4 a rare path can release a component-starved backlog that briefly
+    # exceeds even tripled capacity)
+    assert ems3.capacity_shortfall_units.sum(axis=1).mean() < 0.1
     assert ems3.component_short_units[:, :12].sum(axis=1).mean() > 10
     assert service_level(ems3).mean() < 0.999
 
     both = sim("demand_up_all_capacity_relieved",
                demand_family_mult=_all(pa.families, 1.2),
                ems_capacity_mult=_all(pa.site_names, 3.0))
-    assert both.capacity_shortfall_units.sum() == pytest.approx(0.0, abs=1e-6)
-    assert both.component_short_units[:, :12].sum(axis=1).mean() > 100
+    # components, not capacity, bind: capacity shortfall is under 1% of
+    # component shortfall (a rare path's released backlog can briefly exceed
+    # even tripled capacity since purchasing responds, build step 4)
+    comp_short = both.component_short_units[:, :12].sum(axis=1).mean()
+    assert both.capacity_shortfall_units[:, :12].sum(axis=1).mean() < 0.01 * comp_short
+    assert comp_short > 100
 
 
 def test_overtime_raises_shipments_and_conversion_cost(sim, pa):
@@ -153,10 +166,6 @@ def test_overtime_raises_shipments_and_conversion_cost(sim, pa):
     assert cpu_ot > cpu_base
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "src/simulation.py run_simulation: fpy_eff only feeds rework_cost "
-    "(section 6, rework_units = ship * (1 - fpy_eff)); it never reduces "
-    "site_cap or shipped units in the section 4 shipment loop"))
 def test_lower_yield_reduces_shipments_when_capacity_binds(sim):
     """FPY -10 pts: rework consumes EMS capacity, so good output falls."""
     base = sim("base")
@@ -169,11 +178,6 @@ def test_lower_yield_reduces_shipments_when_capacity_binds(sim):
 # Components: lead time, purchasing response, safety stock
 # ---------------------------------------------------------------------------
 
-@pytest.mark.xfail(strict=True, reason=(
-    "src/simulation.py section 2: lead_time_mult only raises delay_frac, a "
-    "one-month receipt slip (received[:, 1:] += delayed[:, :-1]); higher "
-    "delay_frac also enlarges delayed_pool, so expediting recovers more and "
-    "shortage FALLS. Lead time never gates when supply can respond"))
 def test_longer_lead_time_raises_shortage_under_demand_increase(sim, pa):
     """Components binding (EMS capacity relieved), demand +20%:
     a 50% longer lead time delays the supply response, so component
@@ -188,9 +192,11 @@ def test_longer_lead_time_raises_shortage_under_demand_increase(sim, pa):
 
 
 @pytest.mark.xfail(strict=True, reason=(
-    "src/simulation.py section 2: receipts_nominal is np.tile of "
-    "comp_po_monthly (open_po_units_per_month) for all 18 months; only "
-    "comp_supply_mult/comp_supply_ramp change it, never realized demand"))
+    "DEFERRED by the user 2026-09-27 as calibration. Purchases respond since "
+    "build step 4 (planned orders beyond the lead time; shortage clears with "
+    "no demand noise, and with supply shocks alone). Under lumpy demand the "
+    "data's safety stock (~0.6 months) is too thin, so late-horizon shortage "
+    "stays above months 5-7: a buffer-sizing question, not a missing mechanism"))
 def test_component_purchases_respond_to_sustained_demand_beyond_lead_time(sim, pa):
     """Sustained +20% demand: once past the longest lead time (30 weeks,
     about 7 months) buyers have re-planned, so component shortage in months
@@ -203,11 +209,6 @@ def test_component_purchases_respond_to_sustained_demand_beyond_lead_time(sim, p
     assert late <= early
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "src/simulation.py section 2: safety_floor = comp_safety * "
-    "safety_stock_mult * 0.3 is subtracted from usable supply (start_avail, "
-    "comp_avail) without adding any receipts, so a higher policy removes "
-    "supply and service falls slightly"))
 def test_higher_safety_stock_does_not_reduce_service(sim):
     base = sim("base")
     ss = sim("safety_stock_x2", safety_stock_mult=2.0)
@@ -224,10 +225,6 @@ def test_higher_safety_stock_raises_average_raw_inventory(sim):
 # Financial mechanics: recurring action cost, AP, E&O
 # ---------------------------------------------------------------------------
 
-@pytest.mark.xfail(strict=True, reason=(
-    "src/simulation.py section 6: action_cost_m[:3] = action_cost_usd / 3; "
-    "the only action cost is one-time in months 1-3. No recurring cost for "
-    "permanent capacity (take-or-pay, headcount) after it takes effect"))
 def test_permanent_capacity_action_carries_recurring_cost(sim, config):
     """Reserved EMS capacity (take-or-pay, online month 3) costs money every
     month it is held, not only in Q1."""
@@ -238,24 +235,21 @@ def test_permanent_capacity_action_carries_recurring_cost(sim, config):
     assert (below_gp_cost[:, 3:].mean(axis=0) > 0).all()
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "src/simulation.py section 6: ap = cogs * 0.75 * dpo_days / 30 is tied "
-    "to COGS of recognized units, not to component purchases (receipts)"))
 def test_buying_more_components_raises_ap(sim, pa, config):
-    """+50% receipts on every component: payables rise by at least a quarter
-    of the extra monthly purchase value times DPO / 30."""
+    """Buy more components (double the safety-stock target, a one-time buy of
+    the extra buffer): payables rise by at least a quarter of the extra
+    purchase value, averaged over the fiscal year, times DPO / 30.
+
+    Lever changed 2026-09-27 (build step 5, user approval): since step 4
+    comp_supply_mult scales supplier capacity and no longer buys anything."""
     base = sim("base")
-    buy = sim("comp_supply_x1.5", comp_supply_mult={"__all__": 1.5})
-    extra_purchases_m = 0.5 * float((pa.comp_po_monthly * pa.comp_cost).sum())
+    buy = sim("safety_stock_x2", safety_stock_mult=2.0)
+    extra_purchases_m = float((pa.comp_safety * pa.comp_cost).sum()) / 12.0
     expected = 0.25 * extra_purchases_m * config.financial.dpo_days / 30.0
     d_ap = implied_ap(buy, config)[:, :12].mean() - implied_ap(base, config)[:, :12].mean()
     assert d_ap > expected
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "src/simulation.py section 6: eo_reserve = excess_rm * comp_cost * "
-    "eo_reserve_rate + 0.05 * fg; the components.obsolescence_risk column "
-    "is never read by build_planning_arrays or run_simulation"))
 def test_eo_reflects_component_obsolescence_risk(sim, data):
     """Same excess stock, higher obsolescence risk: larger E&O reserve."""
     lo, hi = data.components.copy(), data.components.copy()

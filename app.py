@@ -424,7 +424,8 @@ def sim_with_confidence(n: int, name: str, overrides: dict):
 
 # ---- evaluation context: (world, response) --------------------------------
 package_specs = [ACTIONS_CATALOG[n] for n in package_names]
-package_cost = float(sum(a.action_cost_usd for a in package_specs))
+package_cost = float(sum(a.action_cost_usd for a in package_specs))       # one-time, Q1
+package_fy_cost = float(sum(a.decision_cost() for a in package_specs))  # + FY recurring
 package_overrides: dict = {}
 for a in package_specs:   # later actions win collisions; adds sum, mults multiply
     package_overrides = merge_confidence_params(package_overrides, a.overrides)
@@ -465,7 +466,7 @@ world_kpi = (base_kpi if world_result is base_result else
              kpi_summary(world_result, baseline, CONFIG))
 ctx_kpi = (world_kpi if ctx_result is world_result else
            kpi_summary(ctx_result, baseline, CONFIG))
-ctx_cmp = (compare_scenarios(base_kpi, ctx_kpi, package_cost)
+ctx_cmp = (compare_scenarios(base_kpi, ctx_kpi, package_fy_cost)
            if ctx_result is not base_result else None)
 
 binding = binding_components(base_result)
@@ -566,9 +567,11 @@ with tabs[0]:
             "the quarter card carries no P(margin) tile). Full guide on the "
             "last tab."))
     if ctx_result is not base_result:
-        cost_note = (f" The package's {fmt_money(package_cost)} decision cost "
-                     f"is charged to Q1 operating income." if package_cost
-                     else "")
+        cost_note = (f" The package's {fmt_money(package_cost)} one-time decision "
+                     f"cost is charged to Q1 operating income"
+                     + (f", plus recurring costs for a FY total of "
+                        f"{fmt_money(package_fy_cost)}" if package_fy_cost > package_cost
+                        else "") + "." if package_fy_cost else "")
         st.info(md(f"Conditioned on **{context_label}** — every figure on "
                    f"this page answers *\"if this happens and we act, where "
                    f"do we land?\"* Tiles compare against the frozen plan of "
@@ -633,7 +636,7 @@ with tabs[0]:
             if package_specs:
                 r2[3].metric("FY incremental EV (net of cost)",
                              fmt_money(ctx_cmp["incremental_ev"]),
-                             f"cost {fmt_money(package_cost)}",
+                             f"FY cost {fmt_money(package_fy_cost)}",
                              delta_color="off")
             # r2[3] blank without a package; r2[4] always blank
         pkg_stage = package_label if package_specs else None
@@ -654,7 +657,7 @@ with tabs[0]:
             additive = sum(
                 action_results[n][0]["fy_gross_profit"]["mean"]
                 - action_ref_kpi["fy_gross_profit"]["mean"]
-                - ACTIONS_CATALOG[n].action_cost_usd for n in package_names)
+                - ACTIONS_CATALOG[n].decision_cost() for n in package_names)
             st.caption(md(
                 f"Interaction check: the package's incremental EV is "
                 f"{fmt_money(ctx_cmp['incremental_ev'])}, vs "
@@ -1224,7 +1227,7 @@ with tabs[8]:
 
     act_rows = []
     for name, (kpi, aspec) in page_actions.items():
-        cmpv = compare_scenarios(ref_kpi, kpi, aspec.action_cost_usd)
+        cmpv = compare_scenarios(ref_kpi, kpi, aspec.decision_cost())
         row = {
             "Action": name,
             "In package": name in package_names,
@@ -1237,17 +1240,17 @@ with tabs[8]:
             "Δ inventory ($M)": cmpv["d_inventory"] / 1e6,
             "Δ working capital ($M)": cmpv["d_working_capital"] / 1e6,
             "Δ service (pts)": cmpv["d_service"] * 100,
-            "Cost ($M)": aspec.action_cost_usd / 1e6,
+            "Cost ($M)": aspec.decision_cost() / 1e6,     # FY: one-time + recurring
             "Incremental EV ($M)": cmpv["incremental_ev"] / 1e6,
             # second EV frame: same net EV over all 18 months, so long-lead
             # actions whose benefits land in months 13-18 aren't structurally
             # buried by the FY window — two labeled frames, never toggled
             "EV full horizon ($M)": (kpi["horizon_gross_profit"]["mean"]
                                      - ref_kpi["horizon_gross_profit"]["mean"]
-                                     - aspec.action_cost_usd) / 1e6}
+                                     - aspec.decision_cost(18)) / 1e6}
         if conditioned and name in action_results:
             base_cmp = compare_scenarios(action_ref_kpi, action_results[name][0],
-                                         aspec.action_cost_usd)
+                                         aspec.decision_cost())
             row["EV in base world ($M)"] = base_cmp["incremental_ev"] / 1e6
         act_rows.append(row)
     adf = (pd.DataFrame(act_rows)
@@ -1348,7 +1351,7 @@ with tabs[8]:
                 f"{fmt_money(r.incremental_cost_usd)}.  \n"
                 f"**Authored assumptions (the claim being made):** "
                 f"{describe_overrides(page_actions[r.title][1].overrides)} — "
-                f"decision cost {fmt_money(page_actions[r.title][1].action_cost_usd)}. "
+                f"FY decision cost {fmt_money(page_actions[r.title][1].decision_cost())}. "
                 f"Edit in config/management_actions.yaml.  \n"
                 f"**Caveat:** {r.caveat}"))
 
@@ -1569,9 +1572,9 @@ engine's planned next capability.
     if ctx_cmp:
         decision_record = {
             "world": spec.name,
-            "actions": [{"name": a.name, "cost": a.action_cost_usd}
+            "actions": [{"name": a.name, "cost": a.decision_cost()}
                         for a in package_specs],
-            "package_cost": package_cost,
+            "package_cost": package_fy_cost,
             "base_kpi": base_kpi, "ctx_kpi": ctx_kpi, "compare": ctx_cmp,
         }
     xl_bytes = build_excel_export(
@@ -1632,12 +1635,16 @@ acceptance/site-readiness slip.
 
 **Financial translation.** COGS = material (with PPV, FX and tightness-driven
 variance) + EMS conversion + integration and test + freight + warranty + scrap
-+ rework + expedite premiums + overtime premiums. Operating income subtracts
-opex and one-time action costs; EBITDA adds back depreciation; the cash-flow
-proxy is EBITDA − Δworking capital − capex − cash taxes. Working capital is
-inventory + simplified receivables (DSO) − simplified payables (DPO). E&O is a
-reserve rate on critical-component stock above 2.5 months of forward usage
-plus 5% of aged finished goods.
++ rework + expedite premiums + overtime premiums. Failed first-pass units are
+reworked, taking EMS capacity as well as cost. Operating income subtracts opex,
+one-time action costs and the monthly cost of permanent actions (take-or-pay
+fees); EBITDA adds back depreciation; the cash-flow proxy is EBITDA −
+Δworking capital − capex − cash taxes. Working capital is inventory +
+receivables (DSO on revenue) − payables (DPO on purchases: parts received,
+other material, EMS conversion and freight). Purchases respond to demand
+beyond each part's lead time. E&O reserves year-end critical stock above 2.5
+months of expected usage, at the policy rate raised by each part's
+obsolescence risk, plus 5% of aged finished goods.
 
 **Known simplifications.** Monthly buckets; pro-rata within an allocation
 tier (no order-level sequencing); no

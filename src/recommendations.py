@@ -97,8 +97,8 @@ ACTION_RISK_MAP: dict[str, tuple[list[str], str]] = {
         "constraint; reservation fees are committed even if demand softens."),
     "Authorize overtime at EMS sites": (
         ["revenue", "service"],
-        "Sustained overtime erodes yield and adherence in practice; modeled as "
-        "cost-only here."),
+        "Added output and the overtime premium are modeled; the yield and "
+        "adherence erosion of sustained overtime is not."),
     "Expedite critical component receipts": (
         ["revenue", "component", "service"],
         "Premiums land in COGS and compress gross margin; benefit shrinks if a "
@@ -112,15 +112,18 @@ ACTION_RISK_MAP: dict[str, tuple[list[str], str]] = {
         "Adds raw-material inventory and E&O exposure if AI demand softens."),
     "Dual-source the high-end FPGA": (
         ["component", "revenue"],
-        "No relief during the six-month qualification window; benefits accrue in "
-        "the second half of the year."),
+        "No relief during the six-month qualification window. Modeled as extra "
+        "supplier capacity, not an independent source, so its insurance value "
+        "against a supplier disruption is understated."),
     "Shift eligible builds to EMS Taiwan": (
         ["revenue", "service"],
         "Transition friction temporarily reduces EMS Malaysia output; regional "
         "concentration risk increases."),
     "Pre-build standard subassemblies": (
         ["component", "revenue", "inventory"],
-        "Increases WIP and raw inventory; exposure if configurations change."),
+        "Modeled as +5% supplier capacity on all parts, which does not pre-build "
+        "anything since purchasing responds to demand; claim sheet under analyst "
+        "review."),
     "Accept shipment risk (no extraordinary cost)": (
         ["margin", "inventory"],
         "Protects margin and cash at the cost of service level and revenue "
@@ -132,8 +135,9 @@ ACTION_RISK_MAP: dict[str, tuple[list[str], str]] = {
         "stocks are cut."),
     "Commit long-lead component orders": (
         ["component", "revenue"],
-        "Non-cancellable commitments become E&O and cash exposure if demand "
-        "softens before receipts arrive; no benefit inside the current quarter."),
+        "Modeled as committed supplier capacity that buyers draw on only when "
+        "demand needs it; the non-cancellable purchase liability if demand "
+        "softens is not modeled. No benefit inside the current quarter."),
     "Qualify EMS Eastern Europe for Zenith Compute": (
         ["revenue", "service"],
         "No relief for roughly three quarters; qualification timelines slip in "
@@ -179,7 +183,7 @@ def build_recommendations(
         d_inv = kpi["ending_inventory"]["mean"] - ref_kpi["ending_inventory"]["mean"]
         d_wc = kpi["working_capital"]["mean"] - ref_kpi["working_capital"]["mean"]
         d_sl = kpi["service_level"]["mean"] - ref_kpi["service_level"]["mean"]
-        ev = d_gp - spec.action_cost_usd
+        ev = d_gp - spec.decision_cost()
         # materiality gates
         if ev < min_ev_usd:
             continue
@@ -236,7 +240,7 @@ def build_recommendations(
             revenue_protected_usd=row["d_rev"],
             gross_profit_protected_usd=row["d_gp"],
             prob_plan_improvement=prob_gain,
-            incremental_cost_usd=row["spec"].action_cost_usd,
+            incremental_cost_usd=row["spec"].decision_cost(),
             inventory_change_usd=row["d_inv"],
             working_capital_change_usd=row["d_wc"],
             service_level_change=row["d_sl"],
