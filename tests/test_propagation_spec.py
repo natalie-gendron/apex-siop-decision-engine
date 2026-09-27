@@ -285,3 +285,146 @@ def test_zero_shock_simulation_reconciles_to_baseline(sim, config, baseline):
             pushout_prob_add=-1.0, pullin_prob_add=-1.0, comp_disrupt_mult=0.0)
     base_fy = float(baseline.monthly["revenue_usd"].iloc[:12].sum())
     assert fy_mean(r.revenue) == pytest.approx(base_fy, rel=0.01)
+
+
+# ---------------------------------------------------------------------------
+# Build step 6a: buy-ahead as a non-cancellable purchase; E&O hits the P&L
+# ---------------------------------------------------------------------------
+
+FPGA_BUY = {"buy_ahead": {"High-End FPGA": (0, 2.0)}}   # 2 months of cover, ordered now
+
+
+def test_buy_ahead_cannot_arrive_before_lead_time(sim, pa):
+    """An order placed in month 1 arrives one lead time later: nothing
+    changes before then."""
+    base = sim("base")
+    buy = sim("fpga_buy_ahead", **FPGA_BUY)
+    c = pa.comp_names.index("High-End FPGA")
+    lt = int(np.ceil(pa.comp_lead_time[c] / 4.345))
+    np.testing.assert_allclose(buy.raw_inventory[:, :lt], base.raw_inventory[:, :lt])
+    assert buy.raw_inventory[:, lt].mean() > base.raw_inventory[:, lt].mean()
+
+
+def test_non_cancellable_buy_ahead_is_exposed_when_demand_softens(sim, pa):
+    """Demand -20%: the committed parts still arrive, so year-end stock and
+    E&O are higher than without the commitment."""
+    down = dict(demand_family_mult=_all(pa.families, 0.8))
+    plain = sim("demand_down", **down)
+    buy = sim("demand_down_fpga_buy", **down, **FPGA_BUY)
+    assert buy.raw_inventory[:, 11].mean() > plain.raw_inventory[:, 11].mean()
+    assert buy.eo_reserve.mean() > plain.eo_reserve.mean()
+
+
+def test_buy_ahead_protects_shipments_in_a_shortage(sim):
+    """FPGA shortage world: parts committed ahead of the cut protect
+    shipments."""
+    from src.scenarios import prebuilt_scenarios
+    world = prebuilt_scenarios()["Critical FPGA Shortage"].overrides
+    plain = sim("fpga_shortage", **world)
+    buy = sim("fpga_shortage_buy", **world, **FPGA_BUY)
+    assert fy_mean(buy.units_shipped) > fy_mean(plain.units_shipped)
+
+
+def test_eo_provision_is_charged_to_cogs(sim, data):
+    """E&O is a P&L charge: the FY provision (year-end reserve less the
+    opening reserve) lowers FY gross profit by the same amount. Higher
+    obsolescence risk changes nothing operational, only the reserve."""
+    lo, hi = data.components.copy(), data.components.copy()
+    lo["obsolescence_risk"] = 0.0
+    hi["obsolescence_risk"] = 1.0
+    r_lo = sim("obsolescence_low", _data=dataclasses.replace(data, components=lo))
+    r_hi = sim("obsolescence_high", _data=dataclasses.replace(data, components=hi))
+    np.testing.assert_allclose(r_hi.units_shipped, r_lo.units_shipped)
+    assert r_hi.eo_reserve.mean() > r_lo.eo_reserve.mean()
+    d_provision = r_hi.eo_provision.mean() - r_lo.eo_provision.mean()
+    d_gp = fy_mean(r_hi.gross_profit) - fy_mean(r_lo.gross_profit)
+    assert d_provision != 0
+    assert d_gp == pytest.approx(-d_provision, rel=1e-6)
+
+
+# ---------------------------------------------------------------------------
+# Build step 6b: a second source is independent, not more of the same
+# ---------------------------------------------------------------------------
+
+DISRUPTED = {"comp_disrupt_mult": 4.0}
+MORE_FPGA = {"comp_supply_ramp": {"High-End FPGA": (0, 1.5)}}
+SECOND_SOURCE = {"dual_source": {"High-End FPGA": (0, 0.5)}}
+
+
+def test_second_source_protects_against_supplier_disruption(sim):
+    """With frequent supplier disruptions, half the FPGA volume on an
+    independent source ships more than the same extra capacity from the one
+    source."""
+    same = sim("disrupted_more_fpga", **DISRUPTED, **MORE_FPGA)
+    dual = sim("disrupted_dual_fpga", **DISRUPTED, **MORE_FPGA, **SECOND_SOURCE)
+    assert fy_mean(dual.units_shipped) > fy_mean(same.units_shipped)
+    assert dual.component_short_units[:, :12].sum(axis=1).mean() < \
+        same.component_short_units[:, :12].sum(axis=1).mean()
+
+
+def test_second_source_changes_nothing_without_disruptions(sim):
+    """Independence is insurance: with no supplier disruptions, the split
+    between sources changes nothing."""
+    calm = {"comp_disrupt_mult": 0.0}
+    one = sim("calm_more_fpga", **calm, **MORE_FPGA)
+    two = sim("calm_dual_fpga", **calm, **MORE_FPGA, **SECOND_SOURCE)
+    np.testing.assert_allclose(two.units_shipped, one.units_shipped)
+    np.testing.assert_allclose(two.revenue, one.revenue)
+
+
+# ---------------------------------------------------------------------------
+# Build step 6c: customer-specific demand events (D7 upside, D9 push-out)
+# ---------------------------------------------------------------------------
+
+TITAN_ASK = {"customer_demand_edit": {"titan_ask": {
+    "customer": "Titan Semiconductor", "family": "Zenith Compute Test",
+    "month": 3, "units": 12}}}
+
+
+def _cust(r, name):
+    return r.customers.index(name)
+
+
+def test_customer_upside_adds_demand_and_revenue_to_that_customer(sim):
+    base = sim("base")
+    ask = sim("titan_ask", **TITAN_ASK)
+    i = _cust(base, "Titan Semiconductor")
+    d_dem = ask.customer_demand[:, :, i].sum(axis=1).mean() - base.customer_demand[:, :, i].sum(axis=1).mean()
+    assert d_dem == pytest.approx(12.0, rel=1e-6)
+    others = [j for j in range(len(base.customers)) if j != i]
+    np.testing.assert_allclose(ask.customer_demand[:, :, others], base.customer_demand[:, :, others])
+    assert ask.customer_revenue[:, :12, i].sum(axis=1).mean() > \
+        base.customer_revenue[:, :12, i].sum(axis=1).mean()
+
+
+def test_customer_upside_displaces_lower_priority_customers(sim, pa):
+    """EMS tight, strict priority: a priority-1 customer's upside is served
+    ahead of priority-3 demand, which ships less."""
+    tight = {"ems_capacity_mult": _all(pa.site_names, 0.85)}
+    base = sim("ems_085", **tight)
+    ask = sim("ems_085_titan_ask", **tight, **TITAN_ASK)
+    j = _cust(base, "Meridian Micro Devices")                  # priority 3
+    assert ask.customer_shipped[:, :12, j].sum(axis=1).mean() < \
+        base.customer_shipped[:, :12, j].sum(axis=1).mean()
+
+
+def test_customer_push_out_moves_that_customers_revenue_later(sim):
+    """A named customer pushes Zenith systems from month 2 to month 5: it
+    moves up to the units asked (a path whose month-2 order already slipped
+    has less to move), so Q1 demand falls by at most that and the customer's
+    horizon demand is unchanged."""
+    push = {"customer_demand_edit": {"kestrel_push": {
+        "customer": "Kestrel Compute", "family": "Zenith Compute Test",
+        "month": 1, "units": 6, "to_month": 4}}}
+    base = sim("base")
+    moved = sim("kestrel_push", **push)
+    i = _cust(base, "Kestrel Compute")
+    q1 = lambda r: r.customer_demand[:, :3, i].sum(axis=1).mean()
+    assert 0.0 < q1(base) - q1(moved) <= 6.0 + 1e-9
+    assert moved.customer_demand[:, :, i].sum() == pytest.approx(base.customer_demand[:, :, i].sum())
+
+
+def test_unknown_customer_edit_is_rejected(data, config):
+    with pytest.raises(KeyError):
+        run_simulation(data, config, n_sims=2, params={"customer_demand_edit": {
+            "x": {"customer": "Nobody Inc", "month": 1, "units": 1}}})

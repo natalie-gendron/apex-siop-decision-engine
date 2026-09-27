@@ -112,18 +112,18 @@ ACTION_RISK_MAP: dict[str, tuple[list[str], str]] = {
         "Adds raw-material inventory and E&O exposure if AI demand softens."),
     "Dual-source the high-end FPGA": (
         ["component", "revenue"],
-        "No relief during the six-month qualification window. Modeled as extra "
-        "supplier capacity, not an independent source, so its insurance value "
-        "against a supplier disruption is understated."),
+        "No relief during the six-month qualification window; the value is "
+        "insurance against a disruption at the primary supplier, so it shows "
+        "mainly in shortage worlds. Any price premium on the alternate part is "
+        "not modeled."),
     "Shift eligible builds to EMS Taiwan": (
         ["revenue", "service"],
         "Transition friction temporarily reduces EMS Malaysia output; regional "
         "concentration risk increases."),
-    "Pre-build standard subassemblies": (
+    "Advance-buy critical components": (
         ["component", "revenue", "inventory"],
-        "Modeled as +5% supplier capacity on all parts, which does not pre-build "
-        "anything since purchasing responds to demand; claim sheet under analyst "
-        "review."),
+        "Non-cancellable: the parts stay on the books if demand softens, adding "
+        "inventory, cash use and E&O; buyers net it out of later orders."),
     "Accept shipment risk (no extraordinary cost)": (
         ["margin", "inventory"],
         "Protects margin and cash at the cost of service level and revenue "
@@ -135,9 +135,8 @@ ACTION_RISK_MAP: dict[str, tuple[list[str], str]] = {
         "stocks are cut."),
     "Commit long-lead component orders": (
         ["component", "revenue"],
-        "Modeled as committed supplier capacity that buyers draw on only when "
-        "demand needs it; the non-cancellable purchase liability if demand "
-        "softens is not modeled. No benefit inside the current quarter."),
+        "Non-cancellable: if demand softens the parts still arrive and become "
+        "inventory, cash use and E&O. No benefit inside the current quarter."),
     "Qualify EMS Eastern Europe for Zenith Compute": (
         ["revenue", "service"],
         "No relief for roughly three quarters; qualification timelines slip in "

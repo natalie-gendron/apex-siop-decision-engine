@@ -93,6 +93,10 @@ comparison and recommendation); "baseline" is `src/baseline_plan.py::run_baselin
 
 ## D3. Buy ahead or commit non-cancellable long-lead parts
 
+*Build status (2026-09, step 6a): buy-ahead is a non-cancellable order gated
+by lead time; E&O from the resulting excess is charged to the P&L. Still
+missing: cancellation windows on open POs.*
+
 - **Question:** Do we place NCNR orders now for parts arriving in 6-9 months,
   accepting E&O risk if demand does not show?
 - **Owner:** VP Supply Chain; CFO for large commitments.
@@ -134,6 +138,10 @@ comparison and recommendation); "baseline" is `src/baseline_plan.py::run_baselin
   quote.
 
 ## D5. Dual-source or qualify an alternate part or EMS site
+
+*Build status (2026-09, step 6b): the alternate part source is independent
+(own disruption draws) and adds capacity. Still missing: a cost delta for the
+alternate part, and an alternate EMS site with its own disruption risk.*
 
 - **Question:** Do we spend qualification cost and engineering time to open a
   second source or site?
@@ -177,6 +185,10 @@ comparison and recommendation); "baseline" is `src/baseline_plan.py::run_baselin
 
 ## D7. Accept or commit to a customer upside or pull-in
 
+*Build status (2026-09, step 6c): customer-level upside and pull-in events
+(`customer_demand_edit`), with displacement by customer under the allocation
+policy in force.*
+
 - **Question:** A customer asks for more systems or earlier dates. Can we
   commit, what does it cost, and whose shipments does it displace?
 - **Owner:** VP Sales proposes; VP Ops commits; CFO if it needs spend.
@@ -216,6 +228,10 @@ comparison and recommendation); "baseline" is `src/baseline_plan.py::run_baselin
   promises never appears, and raising safety stock (D10) cuts shipments.
 
 ## D9. Respond to a customer push-out or cancellation
+
+*Build status (2026-09, steps 4 and 6c): customer-level push-out events;
+purchases respond beyond the lead time. Still missing: customer cancellation
+fees and NCNR terms on open POs.*
 
 - **Question:** A key customer pushes or cancels. Do we slow purchases, cut
   EMS commitments, or redeploy to other customers?

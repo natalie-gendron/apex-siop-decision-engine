@@ -283,6 +283,26 @@ Executive answer first, then the meeting's supporting flow:
   cut hits open POs at once and an increase cannot beat the lead time. The
   valuation damping is retired: inventory is valued as held. E&O measures
   year-end excess against expected usage at the demand run rate.
+- **Buy-ahead is a non-cancellable purchase; E&O is a P&L charge**
+  (2026-09, build step 6a). `buy_ahead` orders N months of cover in a
+  given month; it arrives one lead time later, and buyers net it out of
+  later orders but cannot cancel it. The FY E&O provision (year-end reserve
+  less the opening reserve) is charged to COGS in the FY's last month, and
+  inventory is carried net of the reserve, so every EV sees E&O and cash is
+  unchanged by the non-cash charge. "Pre-build standard subassemblies" was
+  renamed "Advance-buy critical components", which is what its claim
+  describes.
+- **Customer events are world scenarios** (2026-09, build step 6c).
+  `customer_demand_edit` applies a known event to one customer's lines: an
+  upside ask arrives as booked orders; a pull-in or push-out moves up to the
+  units asked. Displacement is read in the customer table under the
+  allocation policy in force. "Major Customer Push-Out" is now a named
+  customer's event; "Key Customer Upside Request" is new (9 scenarios).
+- **A second source is independent** (2026-09, build step 6b).
+  `dual_source` puts a share of a part's volume on an alternate supplier
+  whose disruption events are drawn independently (a separate random
+  stream, so runs without it are unchanged). Dual-sourcing now pays in
+  shortage worlds and costs its fee in calm ones.
 - **Levers do what their labels say** (2026-09, build step 5).
   - Safety stock is a true buffer: the policy is the target buyers order
     toward, and all of it is usable when parts run short.
