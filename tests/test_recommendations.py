@@ -53,9 +53,9 @@ def test_recommendations_reference_modeled_outcomes(pipeline):
         kpi, spec = action_results[rec.title]
         expected_ev = (kpi["fy_gross_profit"]["mean"]
                        - base_kpi["fy_gross_profit"]["mean"]
-                       - spec.action_cost_usd)
+                       - spec.decision_cost())
         assert rec.expected_value_usd == pytest.approx(expected_ev)
-        assert rec.incremental_cost_usd == spec.action_cost_usd
+        assert rec.incremental_cost_usd == spec.decision_cost()
 
 
 def test_recommendations_materiality_gates(pipeline):

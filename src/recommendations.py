@@ -183,7 +183,7 @@ def build_recommendations(
         d_inv = kpi["ending_inventory"]["mean"] - ref_kpi["ending_inventory"]["mean"]
         d_wc = kpi["working_capital"]["mean"] - ref_kpi["working_capital"]["mean"]
         d_sl = kpi["service_level"]["mean"] - ref_kpi["service_level"]["mean"]
-        ev = d_gp - spec.action_cost_usd
+        ev = d_gp - spec.decision_cost()
         # materiality gates
         if ev < min_ev_usd:
             continue
@@ -240,7 +240,7 @@ def build_recommendations(
             revenue_protected_usd=row["d_rev"],
             gross_profit_protected_usd=row["d_gp"],
             prob_plan_improvement=prob_gain,
-            incremental_cost_usd=row["spec"].action_cost_usd,
+            incremental_cost_usd=row["spec"].decision_cost(),
             inventory_change_usd=row["d_inv"],
             working_capital_change_usd=row["d_wc"],
             service_level_change=row["d_sl"],

@@ -110,6 +110,15 @@ class ScenarioSpec:
     action_cost_usd: float = 0.0     # direct cost of the management decision (fees etc.)
     horizon: str = "Tactical"        # Execution (0-3 mo) / Tactical (1-3 qtrs) / Long-lead (6-18 mo)
 
+    def decision_cost(self, months: int = 12) -> float:
+        """Cost of the decision over the first `months` months (FY = 12,
+        horizon = 18): the one-time cost plus any recurring cost for the
+        months it is held. Every EV nets this, so it matches what the
+        simulation charges to operating income."""
+        recurring = sum(float(usd) * max(0, months - int(start))
+                        for start, usd in self.overrides.get("recurring_cost", {}).values())
+        return self.action_cost_usd + recurring
+
 
 @dataclass
 class Recommendation:

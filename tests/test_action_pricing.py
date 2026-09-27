@@ -111,9 +111,35 @@ def test_recommendation_deltas_use_equal_count_reference(
         kpi, spec = actions[rec.title]
         expected_ev = (kpi["fy_gross_profit"]["mean"]
                        - ref["fy_gross_profit"]["mean"]
-                       - spec.action_cost_usd)
+                       - spec.decision_cost())
         assert rec.expected_value_usd == pytest.approx(expected_ev)
         # inert-in-Q1 actions must not be credited with a Q1 probability gain
         if rec.title in INERT_IN_Q1:
             d_q1 = kpi["p_q1_plan"] - ref["p_q1_plan"]
             assert abs(d_q1) <= 0.001
+
+
+def test_ev_nets_recurring_cost(data, config, baseline):
+    """A permanent action's EV nets its recurring cost: EV (Δ FY gross profit
+    less FY decision cost) equals the Δ FY operating income the simulation
+    books (recurring cost included) less the one-time cost."""
+    from src.simulation import fiscal_year
+    spec = management_actions()["Reserve additional EMS capacity"]
+    start, monthly = spec.overrides["recurring_cost"][spec.name]
+    assert spec.decision_cost() == pytest.approx(spec.action_cost_usd + monthly * (12 - start))
+    assert spec.decision_cost(18) == pytest.approx(spec.action_cost_usd + monthly * (18 - start))
+    # EMS disruption: a world where this recommendation fires
+    world = prebuilt_scenarios()["EMS Malaysia Disruption"].overrides
+    ref = run_simulation(data, config, baseline, params=world, n_sims=300, seed=5)
+    act = run_simulation(data, config, baseline, n_sims=300, seed=5,
+                         params=merge_confidence_params(world, spec.overrides))
+    d_gp = fiscal_year(act.gross_profit).mean() - fiscal_year(ref.gross_profit).mean()
+    d_oi = fiscal_year(act.operating_income).mean() - fiscal_year(ref.operating_income).mean()
+    assert d_gp - spec.decision_cost() == pytest.approx(d_oi - spec.action_cost_usd, rel=1e-9)
+    kpi_ref, kpi_act = kpi_summary(ref, baseline, config), kpi_summary(act, baseline, config)
+    recs = build_recommendations(kpi_ref, {spec.name: (kpi_act, spec)},
+                                 binding_components(ref), min_ev_usd=-1e12)
+    assert recs, "the recommendation must fire for the check to mean anything"
+    for rec in recs:
+        assert rec.expected_value_usd == pytest.approx(d_gp - spec.decision_cost())
+        assert rec.incremental_cost_usd == pytest.approx(spec.decision_cost())

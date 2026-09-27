@@ -662,7 +662,7 @@ def run_simulation(data: InputData, config: AppConfig,
 
     # inventory: critical-component RM + non-critical RM + WIP + FG awaiting acceptance
     # critical stock is valued as physically held: on-hand plus receipts less
-    # consumption, including the safety stock that is not usable for builds
+    # consumption
     cum_consumed_path = _cum_consumed_path(ship, usage)                # (n, M, C)
     stock_path = np.clip(pa.comp_on_hand[None, None, :] + np.cumsum(received, axis=1)
                          - cum_consumed_path, 0, None)                 # (n, M, C)
