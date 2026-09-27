@@ -1632,12 +1632,16 @@ acceptance/site-readiness slip.
 
 **Financial translation.** COGS = material (with PPV, FX and tightness-driven
 variance) + EMS conversion + integration and test + freight + warranty + scrap
-+ rework + expedite premiums + overtime premiums. Operating income subtracts
-opex and one-time action costs; EBITDA adds back depreciation; the cash-flow
-proxy is EBITDA − Δworking capital − capex − cash taxes. Working capital is
-inventory + simplified receivables (DSO) − simplified payables (DPO). E&O is a
-reserve rate on critical-component stock above 2.5 months of forward usage
-plus 5% of aged finished goods.
++ rework + expedite premiums + overtime premiums. Failed first-pass units are
+reworked, taking EMS capacity as well as cost. Operating income subtracts opex,
+one-time action costs and the monthly cost of permanent actions (take-or-pay
+fees); EBITDA adds back depreciation; the cash-flow proxy is EBITDA −
+Δworking capital − capex − cash taxes. Working capital is inventory +
+receivables (DSO on revenue) − payables (DPO on purchases: parts received,
+other material, EMS conversion and freight). Purchases respond to demand
+beyond each part's lead time. E&O reserves year-end critical stock above 2.5
+months of expected usage, at the policy rate raised by each part's
+obsolescence risk, plus 5% of aged finished goods.
 
 **Known simplifications.** Monthly buckets; pro-rata within an allocation
 tier (no order-level sequencing); no

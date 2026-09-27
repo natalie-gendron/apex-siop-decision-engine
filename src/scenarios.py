@@ -116,6 +116,14 @@ def management_actions(catalog_path: "str | None" = None,
             raise ValueError(f"Action '{name}' has a negative cost.")
         # YAML lists arrive where the simulator expects tuples; normalize
         overrides = {k: _normalize_override(v) for k, v in overrides.items()}
+        # a permanent action (take-or-pay, headcount) costs money every month
+        # it is held; keyed by action so a package's recurring costs add up
+        recurring = float(entry.get("recurring_cost_usd_per_month", 0.0))
+        if recurring < 0:
+            raise ValueError(f"Action '{name}' has a negative recurring cost.")
+        if recurring > 0:
+            start = int(entry.get("recurring_start_month", 0))
+            overrides["recurring_cost"] = {name: (start, recurring)}
         out[name] = ScenarioSpec(name, str(entry["description"]).strip(),
                                  overrides, action_cost_usd=cost,
                                  horizon=horizon)
@@ -202,11 +210,14 @@ def describe_overrides(overrides: dict[str, Any]) -> str:
             bits += [f"{s}: {u:+g} std-units/mo from month {int(m) + 1}"
                      for s, (m, u) in v.items()]
         elif key == "comp_supply_mult":
-            bits += [f"{'all components' if c == '__all__' else c}: receipts ×{x:g}"
+            bits += [f"{'all components' if c == '__all__' else c}: supplier capacity ×{x:g}"
                      for c, x in v.items()]
         elif key == "comp_supply_ramp":
-            bits += [f"{'all components' if c == '__all__' else c}: receipts "
+            bits += [f"{'all components' if c == '__all__' else c}: supplier capacity "
                      f"×{x:g} from month {int(m) + 1}" for c, (m, x) in v.items()]
+        elif key == "recurring_cost":
+            bits += [f"recurring cost ${usd / 1e3:,.0f}k/mo from month {int(m) + 1}"
+                     for m, usd in v.values()]
         elif key == "safety_stock_mult":
             bits.append(f"safety-stock policy ×{v:g}")
         elif key == "expedite_recovery":

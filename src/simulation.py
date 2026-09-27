@@ -25,7 +25,7 @@ import numpy as np
 from .config import AppConfig
 from .correlations import FactorEngine
 from .models import BaselineResult, InputData, SimulationResult
-from .operations import PlanningArrays, build_planning_arrays, standard_unit_cost
+from .operations import REWORK_SHARE, PlanningArrays, build_planning_arrays, standard_unit_cost
 from .shocks import Shocks
 from .utils import FAMILY_MARKET, N_MONTHS, PRODUCT_FAMILIES
 
@@ -72,6 +72,7 @@ def default_params() -> dict[str, Any]:
         "freight_mult": 1.0,
         "material_cost_mult": 1.0,
         "action_cost_usd": 0.0,          # one-time decision cost, spread over first quarter
+        "recurring_cost": {},            # action -> (start_month, usd_per_month) while held
     }
 
 
@@ -306,11 +307,10 @@ def run_simulation(data: InputData, config: AppConfig,
     for comp, frac in p["expedite_recovery_by_comp"].items():
         recovery_vec[pa.comp_names.index(comp)] = float(frac)
     recovery = recovery_vec * np.where(pa.comp_expedite_ok, 1.0, 0.0)   # (C,)
-    # 30% of the safety-stock policy is held back from builds; the policy
-    # itself is the buffer target buyers order toward
+    # the safety-stock policy is the buffer target buyers order toward, and
+    # the buffer is fully usable when parts run short (that is its job)
     ss_target = pa.comp_safety * p["safety_stock_mult"]
-    safety_floor = ss_target * 0.3
-    start_avail = np.clip(pa.comp_on_hand - safety_floor, 0, None)      # (C,)
+    start_avail = pa.comp_on_hand.copy()                                # (C,)
     cum_req = np.cumsum(np.einsum("nmf,cf->nmc", demand, pa.comp_usage), axis=1)
     plan_cum = np.vstack([np.zeros((1, n_f)), np.cumsum(pa.demand_units, axis=0)])  # (M+1, F)
 
@@ -363,10 +363,14 @@ def run_simulation(data: InputData, config: AppConfig,
         cap = cap + p["overtime_fraction"] * pa.site_overtime[s][None, :] * ot_mask[None, :]
         site_cap[:, s, :] = np.clip(cap, 0, None) * adherence[s][None, :]
 
-    # first-pass yield drives rework cost (output effect: propagation spec)
+    # first-pass yield: a unit failing first pass is reworked, taking
+    # REWORK_SHARE of a build slot, so each good unit loads the EMS by
+    # (1 + REWORK_SHARE x (1 - FPY)) and costs rework
     fpy_base = float((pa.site_fpy * pa.site_capacity).sum() / pa.site_capacity.sum())
     fpy_eff = np.clip(fpy_base + p["fpy_delta"]
                       - 0.02 * np.clip(-ems_shock, 0, None), 0.7, 0.99)
+    load_per_unit = pa.family_complexity[None, None, :] \
+        * (1 + REWORK_SHARE * (1 - fpy_eff))[:, :, None]                # (n, M, F) std-units
 
     # ------------------------------------------------------------------
     # 4. Monthly shipment loop (vectorized across sims and families)
@@ -471,7 +475,7 @@ def run_simulation(data: InputData, config: AppConfig,
             # demand; three rounds recover nearly all slack one pass strands.
             after_cap = np.zeros((n_sims, n_f))
             for _ in range(3):
-                unmet_std = np.clip(after_comp - after_cap, 0, None) * pa.family_complexity[None, :]
+                unmet_std = np.clip(after_comp - after_cap, 0, None) * load_per_unit[:, m]
                 if unmet_std.sum() < 1e-6:
                     break
                 for s in site_order[m]:
@@ -480,7 +484,7 @@ def run_simulation(data: InputData, config: AppConfig,
                     share = np.divide(q_std, denom, out=np.zeros_like(q_std),
                                       where=denom > 1e-9)
                     give_std = np.minimum(q_std, site_rem[:, s][:, None] * share)
-                    after_cap += give_std / pa.family_complexity[None, :]
+                    after_cap += give_std / load_per_unit[:, m]
                     site_rem[:, s] -= give_std.sum(axis=1)
                     unmet_std = np.clip(unmet_std - give_std, 0, None)
             shipped_f = np.minimum(after_cap, after_comp)
@@ -561,7 +565,7 @@ def run_simulation(data: InputData, config: AppConfig,
     expedite_cost_comp = (recovered * pa.comp_cost[None, None, :]
                           * pa.comp_expedite_prem[None, None, :]
                           * p["expedite_premium_mult"]).sum(axis=2)   # (n, M)
-    ems_load_std = (ship * pa.family_complexity[None, None, :]).sum(axis=2)
+    ems_load_std = (ship * load_per_unit).sum(axis=2)                  # incl. rework slots
     total_cap = site_cap.sum(axis=1)
     ems_util = ems_load_std / np.clip(total_cap, 1e-9, None)
 
@@ -629,7 +633,7 @@ def run_simulation(data: InputData, config: AppConfig,
                    + freight_c[lfam][None, None, :] * freight_mult[:, :, None])
 
     # rework: units failing first pass are reworked at half conversion cost
-    rework_cost = (ship * (0.5 * conv_c)[None, None, :]).sum(axis=2) * (1 - fpy_eff)
+    rework_cost = (ship * (REWORK_SHARE * conv_c)[None, None, :]).sum(axis=2) * (1 - fpy_eff)
     # overtime conversion premium: std-units produced above base capacity carry
     # the weighted-average overtime premium on EMS conversion cost
     if p["overtime_fraction"] > 0:
@@ -650,6 +654,9 @@ def run_simulation(data: InputData, config: AppConfig,
     gross_profit = revenue - cogs
     action_cost_m = np.zeros(M)
     action_cost_m[:3] = p["action_cost_usd"] / 3.0
+    # permanent actions (take-or-pay, headcount) cost money every month held
+    for start_m, usd in p["recurring_cost"].values():
+        action_cost_m[int(start_m):] += float(usd)
     operating_income = gross_profit - fin.opex_monthly_usd - action_cost_m[None, :]
     ebitda = operating_income + fin.depreciation_monthly_usd
 
@@ -669,19 +676,30 @@ def run_simulation(data: InputData, config: AppConfig,
     inventory = rm + wip + fg
 
     ar = revenue * fin.dso_days / 30.0
-    ap = cogs * 0.75 * fin.dpo_days / 30.0
+    # payables follow purchases: critical parts as received, other material
+    # as consumed, EMS conversion and freight as billed on builds
+    crit_bought = (received * pa.comp_cost[None, None, :]).sum(axis=2)
+    crit_used = (np.diff(cum_consumed_path, axis=1, prepend=0.0)
+                 * pa.comp_cost[None, None, :]).sum(axis=2)
+    purchases = (crit_bought + np.clip(mat_spend * material_mult - crit_used, 0, None)
+                 + (ship * conv_c[None, None, :]).sum(axis=2) * conv_mult
+                 + (ship * freight_c[None, None, :]).sum(axis=2) * freight_mult)
+    ap = purchases * fin.dpo_days / 30.0
     working_capital = inventory + ar - ap
     dwc = np.diff(working_capital, axis=1, prepend=working_capital[:, :1])
     cash_flow = ebitda - dwc - fin.capex_monthly_usd \
         - np.clip(operating_income, 0, None) * fin.tax_rate
 
     # E&O: excess critical-component stock at FY end above 2.5 months of the
-    # usage buyers expect (next quarter's plan at the demand run rate),
-    # reserved at the configured rate, plus obsolescence-weighted aged FG
+    # usage buyers expect (next quarter's plan at the demand run rate). Each
+    # part's excess is reserved at the policy rate plus its obsolescence
+    # probability on the remainder (risk 0: policy rate; risk 1: written
+    # off), plus 5% of aged finished goods
     fwd_plan = pa.demand_units[12:15].mean(axis=0)                    # (F,)
     fwd_usage = np.einsum("nf,cf->nc", fy_end_run_rate * fwd_plan[None, :], usage)
     excess_rm = np.clip(stock_path[:, 11, :] - 2.5 * fwd_usage, 0, None)
-    eo_reserve = (excess_rm * pa.comp_cost[None, :]).sum(axis=1) * fin.eo_reserve_rate \
+    eo_rate = fin.eo_reserve_rate + pa.comp_obsolescence * (1 - fin.eo_reserve_rate)  # (C,)
+    eo_reserve = (excess_rm * pa.comp_cost[None, :] * eo_rate[None, :]).sum(axis=1) \
         + fg[:, 11] * 0.05
 
     if progress_cb:

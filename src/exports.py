@@ -379,12 +379,13 @@ def build_excel_export(
             "Financials: revenue = recognized units x realized ASP; COGS includes "
             "material (with PPV/FX), conversion, integration, freight, warranty, "
             "scrap, rework, expedite and overtime premiums.",
-            "Working capital = inventory + simplified receivables (DSO) - simplified "
-            "payables (DPO). Cash proxy = EBITDA - ΔWC - capex - cash taxes.",
-            "E&O: reserve rate applied to critical-component stock above 2.5 months "
-            "of forward usage at fiscal year end, plus 5% of aged finished goods.",
+            "Working capital = inventory + receivables (DSO on revenue) - payables "
+            "(DPO on purchases). Cash proxy = EBITDA - ΔWC - capex - cash taxes.",
+            "E&O: year-end critical stock above 2.5 months of expected usage, reserved "
+            "at the policy rate raised by each part's obsolescence risk, plus 5% of "
+            "aged finished goods.",
             "Sensitivity: Spearman rank correlation — association, not causation.",
-            "Limitations: monthly buckets, family-level simulation, no MILP "
+            "Limitations: monthly buckets, pro-rata within an allocation tier, no MILP "
             "optimization, simplified revenue recognition, no FX balance-sheet "
             "effects.",
         ]})

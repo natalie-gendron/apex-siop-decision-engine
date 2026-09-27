@@ -52,6 +52,7 @@ class PlanningArrays:
     comp_lead_time: np.ndarray        # (n_comp,) weeks
     comp_expedite_prem: np.ndarray    # (n_comp,) premium as % of unit cost
     comp_expedite_ok: np.ndarray      # (n_comp,) bool
+    comp_obsolescence: np.ndarray     # (n_comp,) probability the part becomes obsolete
     revenue_plan_m: np.ndarray        # (n_months,)
     pushout_prob: np.ndarray          # (n_fam,) demand-weighted monthly push-out prob
     pullin_prob: np.ndarray           # (n_fam,)
@@ -193,6 +194,7 @@ def build_planning_arrays(data: InputData) -> PlanningArrays:
         comp_lead_time=comp["lead_time_weeks"].to_numpy(float),
         comp_expedite_prem=comp["expedite_premium_pct"].to_numpy(float),
         comp_expedite_ok=comp["expedite_available"].to_numpy(bool),
+        comp_obsolescence=comp["obsolescence_risk"].to_numpy(float),
         revenue_plan_m=revenue_plan_m,
         pushout_prob=wavg("push_out_prob"), pullin_prob=wavg("pull_in_prob"),
         cancel_prob=wavg("cancel_prob"), site_readiness=wavg("site_readiness_prob"),
@@ -215,6 +217,12 @@ def effective_site_capacity(pa: PlanningArrays, overtime: bool = False) -> np.nd
     return cap
 
 
+# a unit that fails first pass is reworked: it takes this share of a build
+# slot at the EMS and this share of the conversion cost (one assumption
+# drives both the capacity and the cost of yield)
+REWORK_SHARE = 0.5
+
+
 def standard_unit_cost(data: InputData, families: list[str],
                        fpy: float) -> dict[str, np.ndarray]:
     """The one unit-cost policy, per family: standard cost build-up plus scrap
@@ -230,7 +238,7 @@ def standard_unit_cost(data: InputData, families: list[str],
         "warranty": prod["warranty_reserve_usd"].to_numpy(float),
         "scrap": (prod["scrap_prob"] * prod["material_cost_usd"]).to_numpy(float),
     }
-    out["rework"] = (1.0 - fpy) * 0.5 * out["conversion"]
+    out["rework"] = (1.0 - fpy) * REWORK_SHARE * out["conversion"]
     out["standard"] = sum(out[k] for k in ("material", "conversion", "integration",
                                            "freight", "warranty", "scrap", "rework"))
     return out

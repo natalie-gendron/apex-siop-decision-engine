@@ -283,10 +283,18 @@ Executive answer first, then the meeting's supporting flow:
   cut hits open POs at once and an increase cannot beat the lead time. The
   valuation damping is retired: inventory is valued as held. E&O measures
   year-end excess against expected usage at the demand run rate.
-- **One stock policy** (2026-09, interim). 30% of the safety-stock policy is
-  not usable for builds, and all physical stock, including that 30%, is
-  valued in inventory and E&O. The purchasing damping on raw-material
-  valuation was retired in build step 4.
+- **Levers do what their labels say** (2026-09, build step 5).
+  - Safety stock is a true buffer: the policy is the target buyers order
+    toward, and all of it is usable when parts run short.
+  - Yield takes capacity: a failed unit is reworked, taking half a build
+    slot and half the conversion cost (`REWORK_SHARE`, one assumption for
+    both).
+  - Permanent actions carry a monthly cost for as long as they are held
+    (claim-sheet `recurring_cost_usd_per_month`).
+  - Payables follow purchases, not COGS.
+  - E&O weights each part's excess by its obsolescence risk.
+  - Supply levers scale supplier capacity, and action descriptions and
+    caveats say so.
 - **Demand stays unconstrained** — the demand plan feeds requested dates,
   not supply-committed dates.
 

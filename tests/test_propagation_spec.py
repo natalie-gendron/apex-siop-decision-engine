@@ -166,10 +166,6 @@ def test_overtime_raises_shipments_and_conversion_cost(sim, pa):
     assert cpu_ot > cpu_base
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "src/simulation.py run_simulation: fpy_eff only feeds rework_cost "
-    "(section 6, rework_units = ship * (1 - fpy_eff)); it never reduces "
-    "site_cap or shipped units in the section 4 shipment loop"))
 def test_lower_yield_reduces_shipments_when_capacity_binds(sim):
     """FPY -10 pts: rework consumes EMS capacity, so good output falls."""
     base = sim("base")
@@ -229,10 +225,6 @@ def test_higher_safety_stock_raises_average_raw_inventory(sim):
 # Financial mechanics: recurring action cost, AP, E&O
 # ---------------------------------------------------------------------------
 
-@pytest.mark.xfail(strict=True, reason=(
-    "src/simulation.py section 6: action_cost_m[:3] = action_cost_usd / 3; "
-    "the only action cost is one-time in months 1-3. No recurring cost for "
-    "permanent capacity (take-or-pay, headcount) after it takes effect"))
 def test_permanent_capacity_action_carries_recurring_cost(sim, config):
     """Reserved EMS capacity (take-or-pay, online month 3) costs money every
     month it is held, not only in Q1."""
@@ -243,24 +235,21 @@ def test_permanent_capacity_action_carries_recurring_cost(sim, config):
     assert (below_gp_cost[:, 3:].mean(axis=0) > 0).all()
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "src/simulation.py section 6: ap = cogs * 0.75 * dpo_days / 30 is tied "
-    "to COGS of recognized units, not to component purchases (receipts)"))
 def test_buying_more_components_raises_ap(sim, pa, config):
-    """+50% receipts on every component: payables rise by at least a quarter
-    of the extra monthly purchase value times DPO / 30."""
+    """Buy more components (double the safety-stock target, a one-time buy of
+    the extra buffer): payables rise by at least a quarter of the extra
+    purchase value, averaged over the fiscal year, times DPO / 30.
+
+    Lever changed 2026-09-27 (build step 5, user approval): since step 4
+    comp_supply_mult scales supplier capacity and no longer buys anything."""
     base = sim("base")
-    buy = sim("comp_supply_x1.5", comp_supply_mult={"__all__": 1.5})
-    extra_purchases_m = 0.5 * float((pa.comp_po_monthly * pa.comp_cost).sum())
+    buy = sim("safety_stock_x2", safety_stock_mult=2.0)
+    extra_purchases_m = float((pa.comp_safety * pa.comp_cost).sum()) / 12.0
     expected = 0.25 * extra_purchases_m * config.financial.dpo_days / 30.0
     d_ap = implied_ap(buy, config)[:, :12].mean() - implied_ap(base, config)[:, :12].mean()
     assert d_ap > expected
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "src/simulation.py section 6: eo_reserve = excess_rm * comp_cost * "
-    "eo_reserve_rate + 0.05 * fg; the components.obsolescence_risk column "
-    "is never read by build_planning_arrays or run_simulation"))
 def test_eo_reflects_component_obsolescence_risk(sim, data):
     """Same excess stock, higher obsolescence risk: larger E&O reserve."""
     lo, hi = data.components.copy(), data.components.copy()

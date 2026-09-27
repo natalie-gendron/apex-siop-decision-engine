@@ -36,7 +36,7 @@ Horizon: 18 monthly buckets. Refresh cadence assumes a monthly SIOP cycle with a
 | Open POs, dated | part x PO line x confirmed date x qty | Weekly | Procurement | `components.open_po_units_per_month` (flat monthly rate) | Used: receipts inside each part's lead time, and the supplier's committed rate (capacity) beyond it. Dated receipts Missing |
 | Supplier lead time | part x supplier | Monthly | Procurement | `components.lead_time_weeks` | Used: gates when purchases can respond; also structural lateness |
 | Lead-time variability | part x supplier | Quarterly | Procurement | `components.lead_time_std_weeks` | Generated but unused |
-| Safety stock policy | part (x location) | Quarterly | Materials | `components.safety_stock_units` | Used: buffer target buyers order toward; 30% held back from builds; all stock valued |
+| Safety stock policy | part (x location) | Quarterly | Materials | `components.safety_stock_units` | Used: buffer target buyers order toward, usable when parts run short |
 | Minimum order quantity | part x supplier | On change | Procurement | `components.min_order_qty` | Generated but unused |
 | Usage per system, critical parts | part x family | On BOM change | Engineering / Planning | `components.usage_per_system`, `.products_using` | Used |
 | Supplier allocation exposure | part | Monthly | Procurement | `components.allocation_risk` | Used (sim delay fraction) |
@@ -63,7 +63,7 @@ Horizon: 18 monthly buckets. Refresh cadence assumes a monthly SIOP cycle with a
 | Rev-rec policy and acceptance lag | family (x customer where contracts differ) | On policy change | Revenue Accounting | `products.acceptance_lag_months` (lag >= 0.75 means 1-month lag) | Used; `demand_plan.revrec_method` Generated but unused |
 | Rework and scrap rates | family | Quarterly | Quality / Cost Accounting | `products.scrap_prob` | Used (COGS). Rework is driven by EMS first-pass yield; `products.rework_prob`, `ems_capacity.rework_rate`, `.scrap_rate` Generated but unused |
 | Inventory value by class (RM critical, RM other, WIP, FG / awaiting acceptance) | class x month (actuals) | Monthly close | Controller | none (engine derives; non-critical RM is a 0.9-month proxy) | Missing (needed to anchor opening balance) |
-| E&O / obsolescence policy | part or class | Annual | Controller | `config.financial.eo_reserve_rate` (0.25), hard-coded 2.5-month excess and 5% FG factor; `components.obsolescence_risk` | Rate Used; `obsolescence_risk` Used (score only: validation range check) |
+| E&O / obsolescence policy | part or class | Annual | Controller | `config.financial.eo_reserve_rate` (0.25), hard-coded 2.5-month excess and 5% FG factor; `components.obsolescence_risk` | Used: rate plus obsolescence risk per part sets each part's E&O reserve rate |
 
 ### 1.4 FP&A
 
@@ -86,7 +86,7 @@ Horizon: 18 monthly buckets. Refresh cadence assumes a monthly SIOP cycle with a
 | Reserved vs flexible capacity | EMS site x month | Quarterly | EMS Program Mgmt | `ems_capacity.reserved_capacity_units`, `.flexible_capacity_units` | Generated but unused |
 | Overtime maximum | EMS site x month | Per contract | EMS Program Mgmt | `ems_capacity.max_overtime_units` | Used |
 | Overtime premium | EMS site | Per contract | Procurement | `ems_sites.overtime_premium_pct` | Used |
-| Take-or-pay / reservation fee | EMS site | Per contract | Procurement | `ems_sites.capacity_reservation_fee_usd` | Generated but unused (reserve-capacity action uses a hard-coded `action_cost_usd` of 4.5e6) |
+| Take-or-pay / reservation fee | EMS site | Per contract | Procurement | `ems_sites.capacity_reservation_fee_usd` | Used via the claim sheet: read as a fee per reserved std-unit-month, it sets the reserve-capacity action's recurring cost ($59k a month); the engine does not read the column directly |
 | Ramp limit | EMS site | Per contract | EMS Program Mgmt | `ems_sites.max_ramp_pct_per_month` | Generated but unused |
 | Minimum production lot | EMS site (x family) | Per contract | EMS Program Mgmt | `ems_sites.min_production_lot` | Generated but unused |
 | Logistics lead time to customer | EMS site x region | Quarterly | Logistics | `ems_sites.logistics_lead_time_weeks` | Generated but unused |
@@ -127,7 +127,6 @@ Verified by `grep -rnw` over all `*.py` outside `src/data_generator.py` and `tes
 |---|---|---|
 | `hist_forecast_error` | `market_intelligence.py:167, 222` (seeds the forecast-accuracy signal) | None; Demand Confidence score only |
 | `forecast_confidence` | `market_intelligence.py:384, 533, 618`; `validation.py:28` | None; score and range check |
-| `obsolescence_risk` | `validation.py:30` (0 to 1 range check) | None; E&O uses a flat rate |
 | `fat_capacity_units` | `validation.py:40` (non-negative check) | None |
 | `capacity_cost_per_unit_usd` | `validation.py:39` | None; engine uses `ems_sites.cost_per_std_unit_usd` |
 | `inventory_turns_target` | `app.py:1302` (assumptions display) | None |
