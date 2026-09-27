@@ -33,10 +33,10 @@ Horizon: 18 monthly buckets. Refresh cadence assumes a monthly SIOP cycle with a
 |---|---|---|---|---|---|
 | Critical part list | part | Quarterly | Supply Chain | `components.component` (30 parts) | Used |
 | On-hand by critical part | part x location (EMS site / hub) | Weekly | Materials | `components.on_hand_units` | Used (one company-wide pool; no location) |
-| Open POs, dated | part x PO line x confirmed date x qty | Weekly | Procurement | `components.open_po_units_per_month` (flat monthly rate) | Used (as a flat rate; dated receipts Missing) |
-| Supplier lead time | part x supplier | Monthly | Procurement | `components.lead_time_weeks` | Used (sim delay fraction) |
+| Open POs, dated | part x PO line x confirmed date x qty | Weekly | Procurement | `components.open_po_units_per_month` (flat monthly rate) | Used: receipts inside each part's lead time, and the supplier's committed rate (capacity) beyond it. Dated receipts Missing |
+| Supplier lead time | part x supplier | Monthly | Procurement | `components.lead_time_weeks` | Used: gates when purchases can respond; also structural lateness |
 | Lead-time variability | part x supplier | Quarterly | Procurement | `components.lead_time_std_weeks` | Generated but unused |
-| Safety stock policy | part (x location) | Quarterly | Materials | `components.safety_stock_units` | Used (one engine: 30% not usable for builds; all stock valued) |
+| Safety stock policy | part (x location) | Quarterly | Materials | `components.safety_stock_units` | Used: buffer target buyers order toward; 30% held back from builds; all stock valued |
 | Minimum order quantity | part x supplier | On change | Procurement | `components.min_order_qty` | Generated but unused |
 | Usage per system, critical parts | part x family | On BOM change | Engineering / Planning | `components.usage_per_system`, `.products_using` | Used |
 | Supplier allocation exposure | part | Monthly | Procurement | `components.allocation_risk` | Used (sim delay fraction) |

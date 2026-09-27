@@ -274,10 +274,19 @@ Executive answer first, then the meeting's supporting flow:
 - **EMS sites fill least-contested first, then cheapest** (2026-09), so
   flexible multi-family sites stay available for families with no
   alternative.
+- **Purchases respond to demand** (2026-09, build step 4). Inside each part's
+  lead time, receipts are the open POs; beyond it, buyers order up to the
+  plan scaled by how demand is running, plus backlog needs and the
+  safety-stock target, and orders arrive one lead time later. Supplier
+  capacity is the open-PO rate plus 25% flex (cumulative; no flex when a
+  supplier is cut): `comp_supply_mult` / `_ramp` scale that capacity, so a
+  cut hits open POs at once and an increase cannot beat the lead time. The
+  valuation damping is retired: inventory is valued as held. E&O measures
+  year-end excess against expected usage at the demand run rate.
 - **One stock policy** (2026-09, interim). 30% of the safety-stock policy is
   not usable for builds, and all physical stock, including that 30%, is
   valued in inventory and E&O. The purchasing damping on raw-material
-  valuation stays until purchases respond to demand (build step 4).
+  valuation was retired in build step 4.
 - **Demand stays unconstrained** — the demand plan feeds requested dates,
   not supply-committed dates.
 

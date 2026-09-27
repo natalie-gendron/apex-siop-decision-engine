@@ -120,6 +120,10 @@ def allocation_tiers(policy: str, pa: PlanningArrays, top_n: int = 3) -> list[np
     return [t for t in tiers if len(t)]
 
 
+SUPPLIER_UPSIDE_FLEX = 0.25  # suppliers deliver up to 125% of the open-PO rate
+WEEKS_PER_MONTH = 4.345
+
+
 def _lognormal_mult(shock: np.ndarray, sigma: float) -> np.ndarray:
     """Mean-one lognormal multiplier driven by a standard-normal shock."""
     return np.exp(sigma * shock - 0.5 * sigma ** 2)
@@ -242,28 +246,43 @@ def run_simulation(data: InputData, config: AppConfig,
     demand = (firm + fcst) @ fam_onehot                                # (n, M, F)
 
     # ------------------------------------------------------------------
-    # 2. Component supply pipelines (all critical components, vectorized)
+    # 2. Component supply setup. Inside each part's lead time receipts are
+    #    the open POs; beyond it they are planned orders that buyers place
+    #    each month (section 4) and that arrive one lead time later.
     # ------------------------------------------------------------------
     if progress_cb:
         progress_cb(0.25, "Simulating component supply")
     tight_shock = engine.shock("Component tightness", factors, rng) * sh.component_tightness
     logistics_shock = engine.shock("Logistics disruption", factors, rng) * sh.logistics
 
-    receipts_nominal = np.tile(pa.comp_po_monthly[None, None, :], (n_sims, M, 1))
+    # supplier capacity by part and month: comp_supply_mult / _ramp scale it
+    # (a supplier cut, a second source, a capacity commitment)
+    cap_mult = np.ones((M, n_c))
     for comp, mult in p["comp_supply_mult"].items():
-        if comp == "__all__":
-            receipts_nominal *= mult
-        else:
-            receipts_nominal[:, :, pa.comp_names.index(comp)] *= mult
+        cols = slice(None) if comp == "__all__" else pa.comp_names.index(comp)
+        cap_mult[:, cols] *= mult
     for comp, (start_m, mult) in p["comp_supply_ramp"].items():
-        if comp == "__all__":
-            receipts_nominal[:, start_m:, :] *= mult
-        else:
-            receipts_nominal[:, start_m:, pa.comp_names.index(comp)] *= mult
+        cols = slice(None) if comp == "__all__" else pa.comp_names.index(comp)
+        cap_mult[start_m:, cols] *= mult
+    # a supplier can deliver its committed (open-PO) rate plus upside flex; a
+    # cut supplier has no flex. Capacity is cumulative: a light month's unused
+    # capacity carries forward (the supplier builds ahead against the rate)
+    cap_rate = pa.comp_po_monthly[None, :] * cap_mult * np.where(
+        cap_mult >= 1.0, 1 + SUPPLIER_UPSIDE_FLEX, 1.0)                             # (M, C)
+    cum_cap = np.cumsum(cap_rate, axis=0)
+
+    lt_weeks = pa.comp_lead_time * p["lead_time_mult"]
+    lt_months = np.clip(np.ceil(lt_weeks / WEEKS_PER_MONTH).astype(int), 1, M)        # (C,)
+    # open POs cover the lead-time window; a supplier cut applies to them at
+    # once, an increase cannot arrive before the lead time
+    month_ix = np.arange(M)
+    in_window = month_ix[:, None] < lt_months[None, :]                              # (M, C)
+    nominal = np.zeros((n_sims, M, n_c))
+    nominal[:] = np.where(in_window, pa.comp_po_monthly[None, :] * np.minimum(cap_mult, 1.0),
+                          0.0)[None]
 
     # delay fraction rises with supply tightness, logistics disruption and lead time
-    lt_weeks = pa.comp_lead_time[None, None, :] * p["lead_time_mult"]
-    base_delay = np.clip((lt_weeks - 8.0) / 100.0, 0.01, 0.25) * sh.receipt_delay
+    base_delay = np.clip((lt_weeks[None, None, :] - 8.0) / 100.0, 0.01, 0.25) * sh.receipt_delay
     delay_frac = np.clip(
         base_delay
         + 0.06 * np.clip(tight_shock, 0, None)[:, :, None] * pa.comp_alloc_risk[None, None, :] * 2.0
@@ -276,45 +295,32 @@ def run_simulation(data: InputData, config: AppConfig,
                         * (1 + 0.8 * np.clip(tight_shock, 0, None))[:, :, None], 0, 0.5)
     disrupted = rng.random((n_sims, M, n_c)) < disrupt_p
 
-    received = receipts_nominal * (1 - delay_frac)
-    received[:, 1:, :] += (receipts_nominal * delay_frac)[:, :-1, :]
-    received = received * np.where(disrupted, 0.35, 1.0)
-
-    # Expediting recovers part of delayed receipts at a premium — but only
+    # Expediting recovers part of delayed receipts at a premium, but only
     # where the receipts are NEEDED: units are expedited up to the projected
-    # cumulative shortfall against the demand plan's component requirement
-    # to date (the planner's view when the broker is paid — requested dates,
-    # not realized shipments). The recovery fractions cap how much of the
-    # delayed pool CAN be recovered; need caps how much IS.
-    # (A volume-based premium on every late PO priced the standing policy as
-    # ~$28M/yr of waste in the base world, made "stop expediting" free money,
-    # and taxed every receipts-adding action with premium on its own delayed
-    # pool — 2026-08 audit finding.)
-    delayed_pool = receipts_nominal * delay_frac + receipts_nominal * np.where(disrupted, 0.65, 0.0)
+    # cumulative shortfall against the component requirement of realized
+    # demand to date. The recovery fractions cap how much of the delayed
+    # pool CAN be recovered; need caps how much IS. (2026-08 audit: a
+    # volume-based premium on every late PO priced the standing policy as
+    # ~$28M/yr of waste.)
     recovery_vec = np.full(n_c, float(p["expedite_recovery"]))
     for comp, frac in p["expedite_recovery_by_comp"].items():
         recovery_vec[pa.comp_names.index(comp)] = float(frac)
     recovery = recovery_vec * np.where(pa.comp_expedite_ok, 1.0, 0.0)   # (C,)
-    # safety stock is usable in a pinch: only a fraction is treated as a hard
-    # floor; the policy level mainly shows up in average raw-material inventory
-    safety_floor = pa.comp_safety * p["safety_stock_mult"] * 0.3
+    # 30% of the safety-stock policy is held back from builds; the policy
+    # itself is the buffer target buyers order toward
+    ss_target = pa.comp_safety * p["safety_stock_mult"]
+    safety_floor = ss_target * 0.3
     start_avail = np.clip(pa.comp_on_hand - safety_floor, 0, None)      # (C,)
     cum_req = np.cumsum(np.einsum("nmf,cf->nmc", demand, pa.comp_usage), axis=1)
-    recovered = np.zeros_like(received)
-    cum_supply = np.tile(start_avail[None, :], (n_sims, 1))             # (n, C)
-    for m in range(M):
-        cum_supply = cum_supply + received[:, m, :]
-        need = np.clip(cum_req[:, m, :] - cum_supply, 0, None)
-        recovered[:, m, :] = np.minimum(delayed_pool[:, m, :] * recovery[None, :],
-                                        need)
-        cum_supply = cum_supply + recovered[:, m, :]
-    received = received + recovered
-    expedite_cost_comp = (recovered * pa.comp_cost[None, None, :]
-                          * pa.comp_expedite_prem[None, None, :]
-                          * p["expedite_premium_mult"]).sum(axis=2)   # (n, M)
+    plan_cum = np.vstack([np.zeros((1, n_f)), np.cumsum(pa.demand_units, axis=0)])  # (M+1, F)
 
-    comp_avail = np.clip(pa.comp_on_hand[None, None, :] - safety_floor[None, None, :], 0, None) \
-        + np.cumsum(received, axis=1)                                  # usable cumulative supply
+    received = np.zeros((n_sims, M, n_c))
+    recovered = np.zeros((n_sims, M, n_c))
+    comp_avail = np.zeros((n_sims, M, n_c))         # usable cumulative supply
+    cum_supply = np.tile(start_avail[None, :], (n_sims, 1))             # (n, C)
+    cum_received = np.zeros((n_sims, n_c))
+    pending_delay = np.zeros((n_sims, n_c))         # slipped receipts arriving next month
+    comp_ix = np.arange(n_c)
 
     # ------------------------------------------------------------------
     # 3. EMS capacity (final integration and test happen at the EMS)
@@ -415,6 +421,22 @@ def run_simulation(data: InputData, config: AppConfig,
     fam_uses = [usage[:, f] > 0 for f in range(n_f)]
 
     for m in range(M):
+        # receipts: this month's nominal less slippage, plus last month's slip;
+        # a disrupted supplier delivers 35%; expedite recovers what is needed
+        nom = nominal[:, m]
+        slip = nom * delay_frac[:, m]
+        rec_m = (nom - slip + pending_delay) * np.where(disrupted[:, m], 0.35, 1.0)
+        pool = slip + nom * np.where(disrupted[:, m], 0.65, 0.0)
+        pending_delay = slip
+        cum_supply += rec_m
+        need = np.clip(cum_req[:, m] - cum_supply, 0, None)
+        recov = np.minimum(pool * recovery[None, :], need)
+        cum_supply += recov
+        received[:, m] = rec_m + recov
+        recovered[:, m] = recov
+        cum_received += received[:, m]
+        comp_avail[:, m] = cum_supply
+
         firm_new = firm[:, m]
         want_k = np.concatenate([firm_new + carry.sum(axis=0), fcst[:, m]], axis=1)
         alloc_k = np.zeros_like(want_k)
@@ -502,7 +524,43 @@ def run_simulation(data: InputData, config: AppConfig,
         comp_short[:, m] = limit_units[0, :, m].sum(axis=1)
         cap_short[:, m] = limit_units[1, :, m].sum(axis=1)
 
+        # buyers: order up to forecast need over the lead time, the backlog's
+        # parts and the safety-stock target, less stock and what is on order.
+        # The forecast is the plan scaled by how demand is running (trailing
+        # three months vs plan). Orders arrive one lead time later, within
+        # supplier capacity.
+        lo = max(0, m - 2)
+        plan_recent = pa.demand_units[lo:m + 1].sum(axis=0)[None, :]
+        run_rate = np.clip(np.divide(demand[:, lo:m + 1].sum(axis=1), plan_recent,
+                                     out=np.ones((n_sims, n_f)), where=plan_recent > 1e-9),
+                           0.5, 2.0)
+        if m == 11:
+            fy_end_run_rate = run_rate
+        arrive = m + lt_months
+        live = arrive < M
+        if live.any():
+            # plan units for months m+1 .. arrival month, inclusive
+            window = plan_cum[np.minimum(arrive + 1, M)] - plan_cum[m + 1]   # (C, F)
+            # einsum, not @: identical paths must give bit-identical orders
+            fcst_need = np.einsum("nf,cf->nc", run_rate, usage * window)  # (n, C)
+            backlog_need = np.einsum("nf,cf->nc", backlog_path[:, m], usage)
+            stock = np.clip(pa.comp_on_hand[None, :] + cum_received - cum_consumed, 0, None)
+            due = (month_ix[None, :] > m) & (month_ix[None, :] < arrive[:, None])  # (C, M)
+            on_order = pending_delay + np.einsum("nmc,cm->nc", nominal, due.astype(float))
+            order = np.clip(fcst_need + backlog_need + ss_target[None, :] - stock - on_order,
+                            0, None)
+            c_live, a_live = comp_ix[live], arrive[live]
+            before = (month_ix[None, :] < arrive[:, None]).astype(float)      # (C, M)
+            delivered_before = np.einsum("nmc,cm->nc", nominal, before)
+            headroom = np.clip(cum_cap[a_live, c_live][None, :] - delivered_before[:, live], 0, None)
+            # round to a millionth of a unit: the purchasing loop feeds back,
+            # so last-digit float noise must not grow into path differences
+            nominal[:, a_live, c_live] = np.round(np.minimum(order[:, live], headroom), 6)
+
     ship = ship_l @ fam_onehot                                         # (n, M, F)
+    expedite_cost_comp = (recovered * pa.comp_cost[None, None, :]
+                          * pa.comp_expedite_prem[None, None, :]
+                          * p["expedite_premium_mult"]).sum(axis=2)   # (n, M)
     ems_load_std = (ship * pa.family_complexity[None, None, :]).sum(axis=2)
     total_cap = site_cap.sum(axis=1)
     ems_util = ems_load_std / np.clip(total_cap, 1e-9, None)
@@ -601,12 +659,8 @@ def run_simulation(data: InputData, config: AppConfig,
     cum_consumed_path = _cum_consumed_path(ship, usage)                # (n, M, C)
     stock_path = np.clip(pa.comp_on_hand[None, None, :] + np.cumsum(received, axis=1)
                          - cum_consumed_path, 0, None)                 # (n, M, C)
-    # purchasing response: buyers defer/reschedule roughly half of any stock
-    # beyond two months of forward requirement, damping runaway inventory
-    monthly_req_units = pa.comp_usage @ pa.demand_units.mean(axis=0)   # (C,)
-    excess_path = np.clip(stock_path - 2.0 * monthly_req_units[None, None, :], 0, None)
-    held_stock = stock_path - 0.5 * excess_path
-    rm_crit = (held_stock * pa.comp_cost[None, None, :]).sum(axis=2)
+    # buyers respond to demand (section 4), so stock is valued as held
+    rm_crit = (stock_path * pa.comp_cost[None, None, :]).sum(axis=2)
     mat_spend = (ship * mat_c[None, None, :]).sum(axis=2)
     rm = rm_crit + 0.9 * mat_spend
     cycle = prod["build_cycle_months"].to_numpy(float)
@@ -621,9 +675,12 @@ def run_simulation(data: InputData, config: AppConfig,
     cash_flow = ebitda - dwc - fin.capex_monthly_usd \
         - np.clip(operating_income, 0, None) * fin.tax_rate
 
-    # E&O: excess critical-component stock above 2.5 months of usage at FY end,
+    # E&O: excess critical-component stock at FY end above 2.5 months of the
+    # usage buyers expect (next quarter's plan at the demand run rate),
     # reserved at the configured rate, plus obsolescence-weighted aged FG
-    excess_rm = np.clip(stock_path[:, 11, :] - 2.5 * monthly_req_units[None, :], 0, None)
+    fwd_plan = pa.demand_units[12:15].mean(axis=0)                    # (F,)
+    fwd_usage = np.einsum("nf,cf->nc", fy_end_run_rate * fwd_plan[None, :], usage)
+    excess_rm = np.clip(stock_path[:, 11, :] - 2.5 * fwd_usage, 0, None)
     eo_reserve = (excess_rm * pa.comp_cost[None, :]).sum(axis=1) * fin.eo_reserve_rate \
         + fg[:, 11] * 0.05
 

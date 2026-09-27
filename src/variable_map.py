@@ -78,13 +78,16 @@ _ROWS: list[tuple[str, str, str, str, str, str]] = [
     ("build_cycle_months", "Event rate", "products", "Planning", "Months a system sits in WIP",
      "Inventory"),
     ("on_hand_units, open_po_units_per_month", "Event rate", "components", "Materials / Procurement",
-     "Critical-part stock and flat monthly receipts", "Shipments, inventory, E&O"),
+     "Critical-part stock; open POs inside each part's lead time, and the "
+     "supplier's committed rate", "Shipments, inventory, E&O"),
     ("usage_per_system, products_using", "Event rate", "components", "Engineering",
      "Critical-part BOM by family", "Shipments, inventory"),
     ("safety_stock_units", "Event rate", "components", "Materials",
-     "Safety-stock policy; 30% is held back from builds", "Service, inventory"),
+     "Safety-stock policy: the buffer buyers order toward; 30% is held back "
+     "from builds", "Service, inventory"),
     ("lead_time_weeks", "Event rate", "components", "Procurement",
-     "Drives structural receipt lateness", "Expedite cost, shipment timing"),
+     "How long before purchases can respond (open POs cover it); also "
+     "structural receipt lateness", "Shortage under demand change, inventory, expedite cost"),
     ("allocation_risk", "Event rate", "components", "Procurement",
      "Supplier allocation exposure; more lateness when supply is tight", "Shipments, expedite cost"),
     ("disruption_prob_monthly", "Event rate", "components", "Procurement",
@@ -144,15 +147,19 @@ _ROWS: list[tuple[str, str, str, str, str, str]] = [
     ("forced_pushout", "Lever", "src/simulation.py: default_params", "Scenario",
      "Moves a named quantity of a family from one month to another", "Revenue timing"),
     ("lead_time_mult", "Lever", "src/simulation.py: default_params", "Scenario",
-     "Scales lead time (today only lateness; gating comes in build step 4)", "Timing, expedite cost"),
+     "Scales lead time: a longer open-PO window before buying responds, "
+     "plus lateness", "Shortage, inventory, expedite cost"),
     ("comp_disrupt_mult", "Lever", "src/simulation.py: default_params", "Scenario",
      "Scales supplier disruption odds", "Shipments, revenue"),
     ("comp_supply_mult", "Lever", "src/simulation.py: default_params", "Scenario / Action",
-     "Scales receipts by part", "Shipments, inventory"),
+     "Scales supplier capacity by part: a cut applies to open POs at once, "
+     "an increase only after the lead time", "Shipments, inventory"),
     ("comp_supply_ramp", "Lever", "src/simulation.py: default_params", "Action",
-     "Scales receipts by part from a start month", "Shipments, inventory"),
+     "Scales supplier capacity by part from a start month (no sooner than "
+     "the lead time for increases)", "Shipments, inventory"),
     ("safety_stock_mult", "Lever", "src/simulation.py: default_params", "Action",
-     "Scales the safety-stock policy (buffer behavior comes in build step 5)", "Service, inventory"),
+     "Scales the safety-stock policy, the buffer target buyers order toward",
+     "Service, inventory, cash"),
     ("expedite_recovery", "Lever", "src/simulation.py: default_params", "Action",
      "Share of late receipts that can be expedited", "Shipments, COGS"),
     ("expedite_recovery_by_comp", "Lever", "src/simulation.py: default_params", "Action",
@@ -245,13 +252,17 @@ _ROWS: list[tuple[str, str, str, str, str, str]] = [
      "Proxy for raw material outside the 30 critical parts", "Inventory"),
     ("WIP at 60% of cycle cost", "Engine constant", "src/simulation.py section 6", "None yet",
      "WIP valuation", "Inventory"),
-    ("purchasing damping 50% above 2 months", "Engine constant", "src/simulation.py section 6",
-     "None yet", "Half of stock above two months of need is not valued (retired in build step 4)",
-     "Inventory"),
+    ("supplier upside flex 25%", "Engine constant", "src/simulation.py SUPPLIER_UPSIDE_FLEX",
+     "None yet", "Suppliers deliver up to 125% of the open-PO rate (cumulative; none when cut)",
+     "Upside shipments, shortage"),
+    ("buyer run rate: trailing 3 months, clipped 0.5 to 2", "Engine constant",
+     "src/simulation.py section 4", "None yet",
+     "How buyers read demand when scaling the plan for planned orders", "Shortage, inventory"),
     ("AP at 75% of COGS", "Engine constant", "src/simulation.py section 6", "None yet",
      "Payables base (to purchases in build step 5)", "Working capital, cash"),
     ("E&O window 2.5 months, FG 5%", "Engine constant", "src/simulation.py section 6", "None yet",
-     "Excess threshold and aged finished-goods reserve", "E&O"),
+     "Excess threshold (months of expected usage at the demand run rate) and "
+     "aged finished-goods reserve", "E&O"),
 ]
 
 COLUMNS = ["Variable", "Layer", "Where it lives", "Owner", "What it does", "Outputs moved"]

@@ -94,12 +94,19 @@ def test_demand_up_when_ems_binds_raises_past_due_and_lowers_service(sim, pa):
         base.capacity_shortfall_units.sum(axis=1).mean()
 
 
-def test_demand_down_raises_component_inventory_and_eo(sim, pa):
-    """-20% demand with flat receipts: raw inventory builds, E&O rises."""
+def test_demand_down_raises_component_inventory_exposure(sim, pa):
+    """-20% demand: open POs inside the lead time keep arriving, so raw
+    inventory (cash tied up) builds through the lead-time window and is
+    higher on average over the year; revenue falls.
+
+    Restated 2026-09-27 (build step 4, user decision): with buyers
+    responding beyond the lead time, the excess is worked off by year end,
+    so year-end E&O no longer rises with a demand drop. Lasting E&O from a
+    drop belongs to obsolescence risk (step 5), not to this test."""
     base = sim("base")
     down = sim("demand_down", demand_family_mult=_all(pa.families, 0.8))
+    assert down.raw_inventory[:, 2].mean() > base.raw_inventory[:, 2].mean()   # Q1 end
     assert down.raw_inventory[:, :12].mean() > base.raw_inventory[:, :12].mean()
-    assert down.eo_reserve.mean() > base.eo_reserve.mean()
     assert fy_mean(down.revenue) < fy_mean(base.revenue)
 
 
@@ -129,16 +136,22 @@ def test_relieving_ems_capacity_exposes_next_constraint(sim, pa):
     assert fy_mean(ems3.units_shipped) == pytest.approx(
         fy_mean(ems15.units_shipped), rel=0.005)
     assert ems3.ems_utilization[:, :12].mean() < 0.5
-    # the plateau is set by components, not capacity
-    assert ems3.capacity_shortfall_units.sum() == pytest.approx(0.0, abs=1e-6)
+    # the plateau is set by components, not capacity (expected value: since
+    # step 4 a rare path can release a component-starved backlog that briefly
+    # exceeds even tripled capacity)
+    assert ems3.capacity_shortfall_units.sum(axis=1).mean() < 0.1
     assert ems3.component_short_units[:, :12].sum(axis=1).mean() > 10
     assert service_level(ems3).mean() < 0.999
 
     both = sim("demand_up_all_capacity_relieved",
                demand_family_mult=_all(pa.families, 1.2),
                ems_capacity_mult=_all(pa.site_names, 3.0))
-    assert both.capacity_shortfall_units.sum() == pytest.approx(0.0, abs=1e-6)
-    assert both.component_short_units[:, :12].sum(axis=1).mean() > 100
+    # components, not capacity, bind: capacity shortfall is under 1% of
+    # component shortfall (a rare path's released backlog can briefly exceed
+    # even tripled capacity since purchasing responds, build step 4)
+    comp_short = both.component_short_units[:, :12].sum(axis=1).mean()
+    assert both.capacity_shortfall_units[:, :12].sum(axis=1).mean() < 0.01 * comp_short
+    assert comp_short > 100
 
 
 def test_overtime_raises_shipments_and_conversion_cost(sim, pa):
@@ -169,11 +182,6 @@ def test_lower_yield_reduces_shipments_when_capacity_binds(sim):
 # Components: lead time, purchasing response, safety stock
 # ---------------------------------------------------------------------------
 
-@pytest.mark.xfail(strict=True, reason=(
-    "src/simulation.py section 2: lead_time_mult only raises delay_frac, a "
-    "one-month receipt slip (received[:, 1:] += delayed[:, :-1]); higher "
-    "delay_frac also enlarges delayed_pool, so expediting recovers more and "
-    "shortage FALLS. Lead time never gates when supply can respond"))
 def test_longer_lead_time_raises_shortage_under_demand_increase(sim, pa):
     """Components binding (EMS capacity relieved), demand +20%:
     a 50% longer lead time delays the supply response, so component
@@ -188,9 +196,11 @@ def test_longer_lead_time_raises_shortage_under_demand_increase(sim, pa):
 
 
 @pytest.mark.xfail(strict=True, reason=(
-    "src/simulation.py section 2: receipts_nominal is np.tile of "
-    "comp_po_monthly (open_po_units_per_month) for all 18 months; only "
-    "comp_supply_mult/comp_supply_ramp change it, never realized demand"))
+    "DEFERRED by the user 2026-09-27 as calibration. Purchases respond since "
+    "build step 4 (planned orders beyond the lead time; shortage clears with "
+    "no demand noise, and with supply shocks alone). Under lumpy demand the "
+    "data's safety stock (~0.6 months) is too thin, so late-horizon shortage "
+    "stays above months 5-7: a buffer-sizing question, not a missing mechanism"))
 def test_component_purchases_respond_to_sustained_demand_beyond_lead_time(sim, pa):
     """Sustained +20% demand: once past the longest lead time (30 weeks,
     about 7 months) buyers have re-planned, so component shortage in months
@@ -203,11 +213,6 @@ def test_component_purchases_respond_to_sustained_demand_beyond_lead_time(sim, p
     assert late <= early
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "src/simulation.py section 2: safety_floor = comp_safety * "
-    "safety_stock_mult * 0.3 is subtracted from usable supply (start_avail, "
-    "comp_avail) without adding any receipts, so a higher policy removes "
-    "supply and service falls slightly"))
 def test_higher_safety_stock_does_not_reduce_service(sim):
     base = sim("base")
     ss = sim("safety_stock_x2", safety_stock_mult=2.0)
