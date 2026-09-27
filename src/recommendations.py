@@ -112,9 +112,10 @@ ACTION_RISK_MAP: dict[str, tuple[list[str], str]] = {
         "Adds raw-material inventory and E&O exposure if AI demand softens."),
     "Dual-source the high-end FPGA": (
         ["component", "revenue"],
-        "No relief during the six-month qualification window. Modeled as extra "
-        "supplier capacity, not an independent source, so its insurance value "
-        "against a supplier disruption is understated."),
+        "No relief during the six-month qualification window; the value is "
+        "insurance against a disruption at the primary supplier, so it shows "
+        "mainly in shortage worlds. Any price premium on the alternate part is "
+        "not modeled."),
     "Shift eligible builds to EMS Taiwan": (
         ["revenue", "service"],
         "Transition friction temporarily reduces EMS Malaysia output; regional "

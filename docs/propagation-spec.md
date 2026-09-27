@@ -35,6 +35,8 @@ financial answer.
 | Buy-ahead when demand softens | Committed parts still arrive: year-end stock and E&O rise | pass (6a) | Buyers net the commitment out of later orders but cannot cancel it | Yes: the downside of an NCNR buy (D3, D8) |
 | Buy-ahead in a shortage | Committed parts protect shipments | pass (6a) | Parts land before the supplier cut bites | Yes: the upside of an NCNR buy (D3) |
 | E&O is a P&L charge | The FY provision lowers gross profit one for one | pass (6a) | Provision = year-end reserve less opening reserve, charged to COGS; inventory carried net | Yes: without it, no buy-ahead or buffer decision sees its E&O in EV (D3, D10) |
+| Second source under supplier disruption | Ships more than the same extra capacity from one source | pass (6b) | `dual_source`: a share of volume on an alternate source with independent disruption draws | Yes: the insurance value of dual-sourcing (D5) |
+| Second source without disruption | Changes nothing | pass (6b) | Same, with no disruptions to insure against | Guards against a lever that pays in calm worlds |
 
 ## Summary
 

@@ -160,6 +160,9 @@ _ROWS: list[tuple[str, str, str, str, str, str]] = [
     ("comp_supply_ramp", "Lever", "src/simulation.py: default_params", "Action",
      "Scales supplier capacity by part from a start month (no sooner than "
      "the lead time for increases)", "Shipments, inventory"),
+    ("dual_source", "Lever", "src/simulation.py: default_params", "Action",
+     "Share of a part's volume on an alternate source with independent "
+     "disruption events, from a start month", "Shipments under supplier disruption"),
     ("buy_ahead", "Lever", "src/simulation.py: default_params", "Action",
      "Non-cancellable order of N months of cover, placed in a given month and "
      "arriving one lead time later; stays on the books if demand softens",

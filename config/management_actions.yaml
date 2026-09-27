@@ -115,13 +115,16 @@ actions:
 
   # ---- Long-lead horizon (6-18 months; decisions only SIOP can make) ----
   - name: Dual-source the high-end FPGA
-    description: Qualify an alternate FPGA source; +30% FPGA supplier capacity
-      after a six-month qualification window.
+    description: Qualify an alternate FPGA source; after a six-month
+      qualification window it adds 30% FPGA supplier capacity and carries about
+      a quarter of FPGA volume, with its own, independent disruption risk.
     horizon: Long-lead
     action_cost_usd: 2.5e6
     overrides:
       comp_supply_ramp:
         High-End FPGA: [6, 1.3]
+      dual_source:
+        High-End FPGA: [6, 0.25]
 
   - name: Commit long-lead component orders
     description: Place non-cancellable orders now for constrained long-lead

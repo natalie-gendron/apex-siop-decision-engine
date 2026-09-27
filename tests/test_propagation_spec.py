@@ -340,3 +340,33 @@ def test_eo_provision_is_charged_to_cogs(sim, data):
     d_gp = fy_mean(r_hi.gross_profit) - fy_mean(r_lo.gross_profit)
     assert d_provision != 0
     assert d_gp == pytest.approx(-d_provision, rel=1e-6)
+
+
+# ---------------------------------------------------------------------------
+# Build step 6b: a second source is independent, not more of the same
+# ---------------------------------------------------------------------------
+
+DISRUPTED = {"comp_disrupt_mult": 4.0}
+MORE_FPGA = {"comp_supply_ramp": {"High-End FPGA": (0, 1.5)}}
+SECOND_SOURCE = {"dual_source": {"High-End FPGA": (0, 0.5)}}
+
+
+def test_second_source_protects_against_supplier_disruption(sim):
+    """With frequent supplier disruptions, half the FPGA volume on an
+    independent source ships more than the same extra capacity from the one
+    source."""
+    same = sim("disrupted_more_fpga", **DISRUPTED, **MORE_FPGA)
+    dual = sim("disrupted_dual_fpga", **DISRUPTED, **MORE_FPGA, **SECOND_SOURCE)
+    assert fy_mean(dual.units_shipped) > fy_mean(same.units_shipped)
+    assert dual.component_short_units[:, :12].sum(axis=1).mean() < \
+        same.component_short_units[:, :12].sum(axis=1).mean()
+
+
+def test_second_source_changes_nothing_without_disruptions(sim):
+    """Independence is insurance: with no supplier disruptions, the split
+    between sources changes nothing."""
+    calm = {"comp_disrupt_mult": 0.0}
+    one = sim("calm_more_fpga", **calm, **MORE_FPGA)
+    two = sim("calm_dual_fpga", **calm, **MORE_FPGA, **SECOND_SOURCE)
+    np.testing.assert_allclose(two.units_shipped, one.units_shipped)
+    np.testing.assert_allclose(two.revenue, one.revenue)

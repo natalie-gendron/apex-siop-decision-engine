@@ -292,6 +292,11 @@ Executive answer first, then the meeting's supporting flow:
   unchanged by the non-cash charge. "Pre-build standard subassemblies" was
   renamed "Advance-buy critical components", which is what its claim
   describes.
+- **A second source is independent** (2026-09, build step 6b).
+  `dual_source` puts a share of a part's volume on an alternate supplier
+  whose disruption events are drawn independently (a separate random
+  stream, so runs without it are unchanged). Dual-sourcing now pays in
+  shortage worlds and costs its fee in calm ones.
 - **Levers do what their labels say** (2026-09, build step 5).
   - Safety stock is a true buffer: the policy is the target buyers order
     toward, and all of it is usable when parts run short.

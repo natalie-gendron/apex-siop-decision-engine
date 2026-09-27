@@ -139,6 +139,10 @@ missing: cancellation windows on open POs.*
 
 ## D5. Dual-source or qualify an alternate part or EMS site
 
+*Build status (2026-09, step 6b): the alternate part source is independent
+(own disruption draws) and adds capacity. Still missing: a cost delta for the
+alternate part, and an alternate EMS site with its own disruption risk.*
+
 - **Question:** Do we spend qualification cost and engineering time to open a
   second source or site?
 - **Owner:** VP Operations with Engineering; CFO for capex or NRE.

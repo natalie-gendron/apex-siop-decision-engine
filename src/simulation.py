@@ -52,6 +52,8 @@ def default_params() -> dict[str, Any]:
         "comp_disrupt_mult": 1.0,
         "comp_supply_mult": {},          # component -> receipts multiplier
         "comp_supply_ramp": {},          # component -> (start_month, multiplier) after qual lag
+        "dual_source": {},               # component -> (start_month, share) on an alternate
+                                         # source with its own, independent disruptions
         "buy_ahead": {},                 # component -> (order_month, months_of_cover):
                                          # a non-cancellable order, arrives one lead time later
         "safety_stock_mult": 1.0,
@@ -310,6 +312,17 @@ def run_simulation(data: InputData, config: AppConfig,
                         * sh.component_disruption
                         * (1 + 0.8 * np.clip(tight_shock, 0, None))[:, :, None], 0, 0.5)
     disrupted = rng.random((n_sims, M, n_c)) < disrupt_p
+    # an alternate source has its own disruption events (same odds, drawn
+    # independently); a separate stream keeps every other draw unchanged
+    alt_rng = np.random.default_rng([seed, 1])
+    alt_disrupted = alt_rng.random((n_sims, M, n_c)) < disrupt_p
+    alt_share = np.zeros((M, n_c))
+    for comp, (start_m, share) in p["dual_source"].items():
+        cols = comp_ix_all if comp == "__all__" else [pa.comp_names.index(comp)]
+        alt_share[int(start_m):, cols] = float(share)
+    # share of a month's receipts that arrives: a disrupted source delivers 35%
+    delivered = ((1 - alt_share)[None] * np.where(disrupted, 0.35, 1.0)
+                 + alt_share[None] * np.where(alt_disrupted, 0.35, 1.0))    # (n, M, C)
 
     # Expediting recovers part of delayed receipts at a premium, but only
     # where the receipts are NEEDED: units are expedited up to the projected
@@ -444,8 +457,8 @@ def run_simulation(data: InputData, config: AppConfig,
         # a disrupted supplier delivers 35%; expedite recovers what is needed
         nom = nominal[:, m]
         slip = nom * delay_frac[:, m]
-        rec_m = (nom - slip + pending_delay) * np.where(disrupted[:, m], 0.35, 1.0)
-        pool = slip + nom * np.where(disrupted[:, m], 0.65, 0.0)
+        rec_m = (nom - slip + pending_delay) * delivered[:, m]
+        pool = slip + nom * (1.0 - delivered[:, m])
         pending_delay = slip
         cum_supply += rec_m
         need = np.clip(cum_req[:, m] - cum_supply, 0, None)
