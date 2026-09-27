@@ -9,6 +9,10 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+import dataclasses
+
+from src.baseline_plan import run_baseline
+from src.operations import build_planning_arrays, effective_site_capacity
 from src.shocks import Shocks
 from src.simulation import run_simulation
 
@@ -51,3 +55,27 @@ def test_constraint_log_counts_each_unit_once(baseline):
     logged = baseline.constraints["units_lost"].sum()
     assert logged == pytest.approx(first_miss.sum(), abs=0.1 * len(baseline.constraints) + 1)
     assert set(baseline.constraints["type"]) <= {"component", "ems_capacity"}
+
+
+def test_zero_shock_capacity_is_the_stated_capacity(zero, data):
+    """At zero shocks EMS capacity is exactly available x adherence x labor:
+    no leftover mean-one lognormal drag from a sigma whose shock is off."""
+    np.testing.assert_allclose(zero.site_capacity[0],
+                               effective_site_capacity(build_planning_arrays(data)),
+                               rtol=1e-12)
+
+
+def test_backlog_aging_drops_lost_orders(data, config):
+    """With lost-after limits, the aging queue matches the engine's unmet
+    backlog and holds nothing older than the limit."""
+    cfg = config.model_copy(deep=True)
+    cfg.customers.lost_after_months = {c: 1 for c in data.demand["customer"].unique()}
+    cap = data.ems_capacity.copy()
+    cap["available_capacity_units"] *= 0.8
+    b = run_baseline(dataclasses.replace(data, ems_capacity=cap), cfg)
+    aging = b.backlog_aging
+    past_due = aging[aging["age_months"] >= 1].groupby("month")["units"].sum()
+    unmet = b.unmet.sum(axis=1)
+    for m_prev, m in zip(b.monthly["month"][:-1], b.monthly["month"][1:]):
+        assert past_due.get(m, 0.0) == pytest.approx(unmet[m_prev], abs=1e-6)
+    assert aging["age_months"].max() <= 1

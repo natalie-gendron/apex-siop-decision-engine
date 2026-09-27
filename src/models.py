@@ -92,6 +92,7 @@ class SimulationResult:
     customer_demand: np.ndarray | None = None        # (n, M, Cu) units requested (after timing)
     customer_lost_revenue: np.ndarray | None = None  # (n, M, Cu) orders lost after waiting, at ASP
     customer_late_unit_months: np.ndarray | None = None  # (n, Cu) FY sum of past-due units
+    family_lost: np.ndarray | None = None            # (n, M, F) orders lost after waiting, units
 
     @property
     def gross_margin(self) -> np.ndarray:

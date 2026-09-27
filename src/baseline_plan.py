@@ -7,7 +7,9 @@ inventory. This module only packages that single path into the
 plan-of-record tables the views and the export read.
 
 Reporting conventions:
-  - Past-due demand ages first-in, first-out within a product family.
+  - Past-due demand ages first-in, first-out within a product family; orders
+    lost after waiting (customers with a lost-after limit) leave the queue
+    oldest first, as they do in the engine.
   - The constraint log records each unit once, in the month it first misses
     its requested month, against the ceiling that cut it that month
     (a named critical component or qualified EMS capacity).
@@ -54,10 +56,12 @@ def run_baseline(data: InputData, config: AppConfig) -> BaselineResult:
     constraint_rows: list[dict] = []
     cum_dem = np.cumsum(demand, axis=0)
     cum_ship = np.cumsum(built, axis=0)
+    # lost at the end of month m: gone from the queue from month m + 1
+    cum_lost = np.cumsum(r.family_lost[0], axis=0)
     for f, fam in enumerate(fams):
         for m in range(N_MONTHS):
             # demand queue at the start of month m, by age
-            shipped_before = cum_ship[m - 1, f] if m > 0 else 0.0
+            shipped_before = (cum_ship[m - 1, f] + cum_lost[m - 1, f]) if m > 0 else 0.0
             for o in range(m + 1):
                 units = (demand[m, f] if o == m
                          else _fifo_outstanding(cum_dem[:, f], shipped_before, o))
@@ -65,7 +69,8 @@ def run_baseline(data: InputData, config: AppConfig) -> BaselineResult:
                     backlog_age_rows.append({"month": months[m], "age_months": m - o,
                                              "units": units})
             # units of month m's demand that miss month m: logged once, here
-            first_miss = _fifo_outstanding(cum_dem[:, f], cum_ship[m, f], m)
+            first_miss = _fifo_outstanding(
+                cum_dem[:, f], cum_ship[m, f] + (cum_lost[m - 1, f] if m > 0 else 0.0), m)
             cut = limits[:, m, f]
             if first_miss > 0.05 and cut.sum() > 1e-9:
                 for k, (ctype, detail) in enumerate(_LIMITS):

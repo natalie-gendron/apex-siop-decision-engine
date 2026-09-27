@@ -321,8 +321,12 @@ def run_simulation(data: InputData, config: AppConfig,
     # ------------------------------------------------------------------
     if progress_cb:
         progress_cb(0.45, "Simulating EMS capacity")
-    ems_shock = engine.shock("EMS execution", factors, rng) * sh.ems_execution  # (n, M)
-    labor_mult = np.clip(_lognormal_mult(ems_shock, unc.ems_labor_sigma), 0.7, 1.1)
+    ems_raw = engine.shock("EMS execution", factors, rng)                # (n, M)
+    ems_shock = ems_raw * sh.ems_execution
+    # scale the sigma, not the shock: a mean-one lognormal with the shock at
+    # zero but sigma on would still derate capacity by exp(-sigma^2 / 2)
+    labor_mult = np.clip(_lognormal_mult(ems_raw, unc.ems_labor_sigma * sh.ems_execution),
+                         0.7, 1.1)
 
     # each site runs at its own scheduled adherence (EMS scorecard input);
     # overtime capacity is derated by the same adherence as base capacity
@@ -669,6 +673,7 @@ def run_simulation(data: InputData, config: AppConfig,
         customer_lost_revenue=((lost_l * pa.line_asp[None, None, :]) @ cust_onehot
                                ).astype(np.float32),
         customer_late_unit_months=(late_um_l @ cust_onehot).astype(np.float32),
+        family_lost=lost_l @ fam_onehot,
         family_backlog=backlog_path, site_load=site_load, site_capacity=site_cap,
         limit_units=limit_units,
         binding_component=binding_comp,
